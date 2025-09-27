@@ -1,0 +1,260 @@
+<script setup>
+import { reactive, computed, ref, onMounted } from 'vue'
+import { Icon } from '@iconify/vue'
+import AddMedicamento from '~/components/addMedicamento.vue'
+
+const medicamentos = ref([
+  {
+    id: 1,
+    nombre: 'Paracetamol 500mg',
+    fechaEmision: '2023-01-01',
+    fechaVencimiento: '2026-05-10',
+    cantidadTotal: 350,
+    lotes: [
+      {
+        id: 'L-12345',
+        emision: '2023-01-01',
+        vencimiento: '2025-01-01',
+        cantidad: 150,
+      },
+      {
+        id: 'L-12346',
+        emision: '2023-06-01',
+        vencimiento: '2026-05-10',
+        cantidad: 200,
+      },
+    ],
+  },
+])
+
+const daysToMonths = (d) => Math.round(d / 30)
+const daysUntil = (isoDate) => {
+  const today = new Date()
+  const target = new Date(isoDate)
+  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const t1 = new Date(target.getFullYear(), target.getMonth(), target.getDate())
+  return Math.ceil((t1 - t0) / (1000 * 60 * 60 * 24))
+}
+
+const config = reactive({
+  optimo: 24 * 30,
+  seguro: 12 * 30,
+  alerta: 6 * 30,
+  critico: 0,
+})
+
+onMounted(() => {
+  const saved = localStorage.getItem('inventarioConfig')
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved)
+      const toNum = (v, fallback) =>
+        Number.isFinite(Number(v)) ? Number(v) : fallback
+      Object.assign(config, {
+        optimo: toNum(parsed.optimo, config.optimo),
+        seguro: toNum(parsed.seguro, config.seguro),
+        alerta: toNum(parsed.alerta, config.alerta),
+        critico: toNum(parsed.critico, config.critico),
+      })
+    } catch (e) {
+      console.warn('inventarioConfig inválido, usando fallback', e)
+    }
+  }
+})
+
+const legend = computed(() => {
+  const mCrit = daysToMonths(config.critico ?? 0)
+  const mAlert = daysToMonths(config.alerta ?? 0)
+  const mSeg = daysToMonths(config.seguro ?? 0)
+
+  return [
+    { key: 'optimo', color: 'rgb(34,197,94)', text: `Óptimo: > ${mSeg} meses` },
+    {
+      key: 'seguro',
+      color: 'rgb(59,130,246)',
+      text: `Seguro: ${mAlert}–${mSeg} meses`,
+    },
+    {
+      key: 'alerta',
+      color: 'rgb(234,179,8)',
+      text: `Alerta: ${mCrit}–${mAlert} meses`,
+    },
+    {
+      key: 'critico',
+      color: 'rgb(239,68,68)',
+      text: 'Crítico: vencido o ≤ 0 días',
+    },
+  ]
+})
+
+const isExpired = (lote) => daysUntil(lote.vencimiento) <= config.critico
+
+const getColorByDiff = (diffDays) => {
+  if (diffDays <= config.critico) return 'rgb(239,68,68)'
+  if (diffDays <= config.alerta) return 'rgb(234,179,8)'
+  if (diffDays <= config.seguro) return 'rgb(59,130,246)'
+  return 'rgb(34,197,94)'
+}
+
+const getLoteStyle = (lote) => {
+  const diffDays = daysUntil(lote.vencimiento)
+  const max = config.optimo
+  const porcentaje = Math.max(0, Math.min(100, (diffDays / max) * 100))
+  return {
+    width: porcentaje + '%',
+    backgroundColor: getColorByDiff(diffDays),
+  }
+}
+
+const expanded = ref([])
+const mostrarModal = ref(false)
+
+const toggleExpand = (id) => {
+  expanded.value = expanded.value.includes(id)
+    ? expanded.value.filter((x) => x !== id)
+    : [...expanded.value, id]
+}
+
+const guardarMedicamento = (payload) => {
+  if (payload.tipo === 'medicamento') {
+    medicamentos.value.push(payload.data)
+  }
+  if (payload.tipo === 'lote') {
+    const med = medicamentos.value.find((m) => m.id === payload.id)
+    if (med) {
+      med.lotes.push(payload.lote)
+      med.cantidadTotal = med.lotes.reduce((acc, l) => acc + l.cantidad, 0)
+    }
+  }
+}
+</script>
+
+<template>
+  <div class="min-h-screen bg-gray-50 p-8">
+    <div class="max-w-7xl mx-auto bg-white shadow-lg rounded-2xl p-8">
+      <div class="flex items-center justify-between mb-8">
+        <div>
+          <h2 class="text-3xl font-bold text-indigo-700">
+            Inventario de Medicamentos
+          </h2>
+          <p class="text-gray-600 mt-1">
+            Gestione stock, vencimientos y lotes fácilmente
+          </p>
+        </div>
+        <button
+          @click="mostrarModal = true"
+          class="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition"
+        >
+          <Icon icon="mdi:plus-circle" class="text-xl" />
+          Nuevo Medicamento
+        </button>
+      </div>
+
+      <div
+        class="mb-8 bg-indigo-50 border border-indigo-100 rounded-lg p-4 flex flex-wrap gap-4 items-center"
+      >
+        <span class="font-semibold text-indigo-900"
+          >Rangos de vencimiento:</span
+        >
+        <template v-for="item in legend" :key="item.key">
+          <span
+            class="inline-flex items-center gap-2 text-sm px-3 py-1 rounded-full"
+            :style="{ backgroundColor: item.color + '22', color: item.color }"
+          >
+            <span
+              class="w-2 h-2 rounded-full"
+              :style="{ backgroundColor: item.color }"
+            ></span>
+            {{ item.text }}
+          </span>
+        </template>
+      </div>
+
+      <div class="overflow-hidden rounded-lg border border-gray-200">
+        <table class="min-w-full text-sm text-left">
+          <thead class="bg-indigo-600 text-white">
+            <tr>
+              <th class="px-4 py-3">Medicamento</th>
+              <th class="px-4 py-3">Fecha Emisión</th>
+              <th class="px-4 py-3">Fecha Vencimiento</th>
+              <th class="px-4 py-3">Cantidad Total</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            <template v-for="med in medicamentos" :key="med.id">
+              <tr
+                class="hover:bg-indigo-50 cursor-pointer"
+                @click="toggleExpand(med.id)"
+              >
+                <td class="px-4 py-3 font-medium text-indigo-800">
+                  {{ med.nombre }}
+                  <span class="ml-2 text-xs text-gray-500">
+                    ({{ expanded.includes(med.id) ? '▲' : '▼' }})
+                  </span>
+                </td>
+                <td class="px-4 py-3">{{ med.fechaEmision }}</td>
+                <td class="px-4 py-3">{{ med.fechaVencimiento }}</td>
+                <td class="px-4 py-3">{{ med.cantidadTotal }}</td>
+              </tr>
+
+              <tr v-if="expanded.includes(med.id)" class="bg-gray-50">
+                <td colspan="5" class="px-6 py-4">
+                  <div class="grid md:grid-cols-2 gap-4">
+                    <div
+                      v-for="lote in med.lotes"
+                      :key="lote.id"
+                      class="p-4 rounded-lg shadow-sm border"
+                      :class="
+                        isExpired(lote)
+                          ? 'bg-red-50 border-red-200'
+                          : 'bg-white border-gray-200'
+                      "
+                    >
+                      <div class="flex justify-between items-center mb-2">
+                        <h4 class="font-semibold text-gray-800">
+                          Lote {{ lote.id }}
+                        </h4>
+                        <span class="text-xs text-gray-500">
+                          Cantidad: {{ lote.cantidad }}
+                        </span>
+                      </div>
+                      <p class="text-sm text-gray-600 mb-2">
+                        Emisión: {{ lote.emision }} · Vencimiento:
+                        {{ lote.vencimiento }}
+                      </p>
+                      <div class="w-full bg-gray-200 rounded h-2 relative">
+                        <div
+                          class="h-2 rounded"
+                          :style="getLoteStyle(lote)"
+                        ></div>
+                        <div
+                          v-for="mark in [
+                            config.critico,
+                            config.alerta,
+                            config.seguro,
+                            config.optimo,
+                          ]"
+                          :key="mark"
+                          class="absolute top-0 h-2 w-[2px] bg-white/70"
+                          :style="{ left: (mark / config.optimo) * 100 + '%' }"
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <AddMedicamento
+        v-if="mostrarModal"
+        :medicamentos="medicamentos"
+        :medicamentos-existentes="medicamentos"
+        @cerrar="mostrarModal = false"
+        @guardar="guardarMedicamento"
+      />
+    </div>
+  </div>
+</template>
