@@ -2,6 +2,8 @@
 import { reactive, computed, ref, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import AddMedicamento from '~/components/addMedicamento.vue'
+import LoteDetalleVue from '~/components/LoteDetalle.vue'
+import AnalisisMedicamentoVue from '~/components/AnalisisMedicamento.vue'
 const medicamentos = ref([
   {
     id: 1,

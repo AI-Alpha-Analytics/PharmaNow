@@ -2,7 +2,6 @@
 import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import Topvencidos from '~/components/topvencidos.vue'
-import VueApexCharts from 'vue3-apexcharts'
 
 const medicamentos = ref([
   {
@@ -126,7 +125,7 @@ const proximosVencidos = computed(() => {
 </script>
 
 <template>
-  <div class="bg-gray-50 min-h-screen px-4 py-10">
+  <div class="bg-gray-50 px-4 py-10">
     <div
       class="px-6 py-10 bg-white shadow-lg rounded-2xl max-w-5xl w-full mx-auto"
     >

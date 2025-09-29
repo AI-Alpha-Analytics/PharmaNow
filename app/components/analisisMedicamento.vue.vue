@@ -1,7 +1,6 @@
 <script setup>
 import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
-import VueApexCharts from 'vue3-apexcharts'
 
 const props = defineProps({
   medicamento: { type: Object, required: true },
