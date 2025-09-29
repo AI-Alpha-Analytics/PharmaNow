@@ -9,24 +9,24 @@ const medicamentos = ref([
     id: 1,
     nombre: 'Paracetamol 500mg',
     lotes: [
-      { id: 'L-001', fechaIngreso: '2025-06-01', vencimiento: '2025-08-01' },
-      { id: 'L-002', fechaIngreso: '2025-06-15', vencimiento: '2025-07-15' },
-      { id: 'L-003', fechaIngreso: '2025-07-01', vencimiento: '2026-01-01' },
+      { id: 'L-001', fechaIngreso: '2025-06-01',cantidad:10, vencimiento: '2025-08-01' },
+      { id: 'L-002', fechaIngreso: '2025-06-15',cantidad:10,  vencimiento: '2025-07-15' },
+      { id: 'L-003', fechaIngreso: '2025-07-01',cantidad:10,  vencimiento: '2026-01-01' },
     ],
   },
   {
     id: 2,
     nombre: 'Ibuprofeno 400mg',
     lotes: [
-      { id: 'L-004', fechaIngreso: '2025-07-05', vencimiento: '2025-10-10' },
-      { id: 'L-005', fechaIngreso: '2025-07-10', vencimiento: '2025-09-01' },
+      { id: 'L-004', fechaIngreso: '2025-07-05',cantidad:10,  vencimiento: '2025-10-10' },
+      { id: 'L-005', fechaIngreso: '2025-07-10',cantidad:10,  vencimiento: '2025-09-01' },
     ],
   },
   {
     id: 3,
     nombre: 'Amoxicilina 875mg',
     lotes: [
-      { id: 'L-006', fechaIngreso: '2025-07-20', vencimiento: '2025-09-20' },
+      { id: 'L-006', fechaIngreso: '2025-07-20',cantidad:10,  vencimiento: '2025-09-20' },
     ],
   },
 ])
