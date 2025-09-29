@@ -28,23 +28,24 @@ const getEstado = (lote) => {
 }
 
 const colores = {
-  optimo: '#22c55e', // verde
-  seguro: '#3b82f6', // azul
-  alerta: '#eab308', // amarillo
-  critico: '#ef4444', // rojo
+  optimo: '#22c55e',
+  seguro: '#3b82f6',
+  alerta: '#eab308',
+  critico: '#ef4444', 
 }
+
+const lotes = computed(() => props.medicamento?.lotes ?? [])
 
 const lotesPorEstado = computed(() => {
   const grupos = { optimo: [], seguro: [], alerta: [], critico: [] }
-  const lotes = props.medicamento?.lotes ?? []
-  lotes.forEach((l) => {
+  lotes.value.forEach((l) => {
     grupos[getEstado(l)].push(l)
   })
   return grupos
 })
 
 const porcentajes = computed(() => {
-  const total = props.medicamento?.lotes?.length || 0
+  const total = lotes.value.length || 0
   if (total === 0) return { optimo: 0, seguro: 0, alerta: 0, critico: 0 }
   return {
     optimo: Math.round((lotesPorEstado.value.optimo.length / total) * 100),
@@ -54,7 +55,36 @@ const porcentajes = computed(() => {
   }
 })
 
-// 🔹 Configuración ApexCharts
+const totalUnidades = computed(() =>
+  lotes.value.reduce((acc, l) => acc + (l.cantidad || 0), 0)
+)
+
+const usoPromedioMensual = computed(() => {
+  const consumos = lotes.value.flatMap((l) => l.consumos || [])
+  if (!consumos.length) return 0
+  const total = consumos.reduce((acc, c) => acc + c.cantidad, 0)
+  const meses = new Set(consumos.map((c) => c.mes)).size
+  return Math.round(total / (meses || 1))
+})
+
+const usoUltimos3Meses = computed(() => {
+  const ahora = new Date()
+  const ultimos3 = lotes.value.flatMap((l) => l.consumos || [])
+    .filter((c) => {
+      const [year, month] = c.mes.split('-').map(Number)
+      const fecha = new Date(year, month - 1)
+      const diffMeses =
+        (ahora.getFullYear() - fecha.getFullYear()) * 12 +
+        (ahora.getMonth() - fecha.getMonth())
+      return diffMeses <= 2
+    })
+
+  if (!ultimos3.length) return 0
+  const total = ultimos3.reduce((acc, c) => acc + c.cantidad, 0)
+  const meses = new Set(ultimos3.map((c) => c.mes)).size
+  return Math.round(total / (meses || 1))
+})
+
 const chartOptions = computed(() => ({
   chart: { type: 'pie' },
   labels: ['Óptimo', 'Seguro', 'Alerta', 'Crítico'],
@@ -80,9 +110,8 @@ const chartSeries = computed(() => [
 <template>
   <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
     <div
-      class="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto p-8 relative"
+      class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto p-8 relative"
     >
-      <!-- Botón cerrar -->
       <button
         class="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
         @click="emit('cerrar')"
@@ -90,7 +119,6 @@ const chartSeries = computed(() => [
         <Icon icon="mdi:close" class="text-2xl" />
       </button>
 
-      <!-- Header -->
       <div class="mb-6 border-b pb-4">
         <h3 class="text-3xl font-bold text-indigo-700 flex items-center gap-2">
           <Icon icon="mdi:chart-pie" class="text-indigo-500 text-3xl" />
@@ -98,11 +126,31 @@ const chartSeries = computed(() => [
           <span class="text-gray-800">{{ medicamento.nombre }}</span>
         </h3>
         <p class="text-gray-500 mt-1">
-          Distribución de estados de vencimiento de los lotes
+          Distribución de estados de vencimiento y consumos recientes
         </p>
       </div>
 
-      <!-- Gráfico -->
+      <div class="grid md:grid-cols-3 gap-6 mb-10">
+        <div class="p-4 bg-gray-50 rounded-xl shadow-sm text-center">
+          <p class="text-sm text-gray-500">Unidades Totales</p>
+          <p class="text-2xl font-bold text-indigo-700">
+            {{ totalUnidades }}
+          </p>
+        </div>
+        <div class="p-4 bg-gray-50 rounded-xl shadow-sm text-center">
+          <p class="text-sm text-gray-500">Promedio Mensual</p>
+          <p class="text-2xl font-bold text-indigo-700">
+            {{ usoPromedioMensual }} u.
+          </p>
+        </div>
+        <div class="p-4 bg-gray-50 rounded-xl shadow-sm text-center">
+          <p class="text-sm text-gray-500">Últimos 3 meses</p>
+          <p class="text-2xl font-bold text-indigo-700">
+            {{ usoUltimos3Meses }} u.
+          </p>
+        </div>
+      </div>
+
       <div class="grid md:grid-cols-2 gap-6 mb-10">
         <VueApexCharts
           type="pie"
@@ -127,7 +175,6 @@ const chartSeries = computed(() => [
         </div>
       </div>
 
-      <!-- Listado de lotes -->
       <div>
         <h4 class="text-lg font-bold text-gray-800 mb-3">
           Detalle de lotes por estado
