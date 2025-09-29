@@ -2,7 +2,6 @@
 import { reactive, computed, ref, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import AddMedicamento from '~/components/addMedicamento.vue'
-
 const medicamentos = ref([
   {
     id: 1,
@@ -26,6 +25,13 @@ const medicamentos = ref([
     ],
   },
 ])
+const modalAnalisis = ref(false)
+const seleccionado = ref(null)
+
+const abrirAnalisis = (med) => {
+  seleccionado.value = med
+  modalAnalisis.value = true
+}
 
 const daysToMonths = (d) => Math.round(d / 30)
 const daysUntil = (isoDate) => {
@@ -189,6 +195,7 @@ const guardarMedicamento = (payload) => {
               <th class="px-4 py-3">Fecha Emisión</th>
               <th class="px-4 py-3">Fecha Vencimiento</th>
               <th class="px-4 py-3">Cantidad Total</th>
+              <th class="px-4 py-3">Analizar</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200">
@@ -206,51 +213,26 @@ const guardarMedicamento = (payload) => {
                 <td class="px-4 py-3">{{ med.fechaEmision }}</td>
                 <td class="px-4 py-3">{{ med.fechaVencimiento }}</td>
                 <td class="px-4 py-3">{{ med.cantidadTotal }}</td>
+                <td class="px-4 py-3">
+                  <button
+                    @click.stop="abrirAnalisis(med)"
+                    class="inline-flex items-center gap-1 px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs"
+                  >
+                    <Icon icon="mdi:chart-pie" />
+                  </button>
+                </td>
               </tr>
 
               <tr v-if="expanded.includes(med.id)" class="bg-gray-50">
                 <td colspan="5" class="px-6 py-4">
                   <div class="grid md:grid-cols-2 gap-4">
-                    <div
+                    <LoteDetalleVue
                       v-for="lote in med.lotes"
                       :key="lote.id"
-                      class="p-4 rounded-lg shadow-sm border"
-                      :class="
-                        isExpired(lote)
-                          ? 'bg-red-50 border-red-200'
-                          : 'bg-white border-gray-200'
-                      "
-                    >
-                      <div class="flex justify-between items-center mb-2">
-                        <h4 class="font-semibold text-gray-800">
-                          Lote {{ lote.id }}
-                        </h4>
-                        <span class="text-xs text-gray-500">
-                          Cantidad: {{ lote.cantidad }}
-                        </span>
-                      </div>
-                      <p class="text-sm text-gray-600 mb-2">
-                        Emisión: {{ lote.emision }} · Vencimiento:
-                        {{ lote.vencimiento }}
-                      </p>
-                      <div class="w-full bg-gray-200 rounded h-2 relative">
-                        <div
-                          class="h-2 rounded"
-                          :style="getLoteStyle(lote)"
-                        ></div>
-                        <div
-                          v-for="mark in [
-                            config.critico,
-                            config.alerta,
-                            config.seguro,
-                            config.optimo,
-                          ]"
-                          :key="mark"
-                          class="absolute top-0 h-2 w-[2px] bg-white/70"
-                          :style="{ left: (mark / config.optimo) * 100 + '%' }"
-                        ></div>
-                      </div>
-                    </div>
+                      :lote="lote"
+                      :config="config"
+                      :total="med.cantidadTotal"
+                    />
                   </div>
                 </td>
               </tr>
@@ -258,6 +240,12 @@ const guardarMedicamento = (payload) => {
           </tbody>
         </table>
       </div>
+      <AnalisisMedicamentoVue
+          v-if="modalAnalisis"
+          :medicamento="seleccionado"
+          :config="config"
+          @cerrar="modalAnalisis = false"
+        />
 
       <AddMedicamento
         v-if="mostrarModal"
