@@ -25,13 +25,15 @@ const seleccionar = (valor) => {
   if (valor === '_nuevo') {
     creandoNuevo.value = true
     nombre.value = ''
+    error.value = ''
+    mostrarOpciones.value = false 
   } else {
     creandoNuevo.value = false
     nombre.value = valor
+    error.value = ''
+    mostrarOpciones.value = false
   }
-  mostrarOpciones.value = false
 }
-
 const medicamentoExistente = computed(() =>
   props.medicamentosExistentes.find(
     (m) =>
@@ -46,10 +48,36 @@ const loteVencimiento = ref('')
 const loteCantidad = ref(0)
 
 const emit = defineEmits(['guardar', 'cerrar'])
+const dropdownWrapper = ref(null)
+const handleClickOutside = (e) => {
+  if (dropdownWrapper.value && !dropdownWrapper.value.contains(e.target)) {
+    mostrarOpciones.value = false
+  }
+}
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
+
+const error = ref('')
 
 const siguiente = () => {
+  error.value = ''
+
   const nombreFinal = creandoNuevo.value ? nuevoNombre.value : nombre.value
-  if (!nombreFinal) return
+
+  if (!nombreFinal) {
+    error.value = 'Debes seleccionar o crear un medicamento.'
+    return
+  }
+
+  if (!creandoNuevo.value && !medicamentoExistente.value) {
+    error.value = 'Este medicamento no existe en el sistema. Selecciónalo de la lista o usa "Nuevo medicamento".'
+    return
+  }
+
   paso.value = 2
 }
 
@@ -110,66 +138,72 @@ const guardar = () => {
         @submit.prevent="siguiente"
         class="space-y-5 relative"
       >
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1"
-            >Medicamento</label
-          >
-          <input
-            v-model="nombre"
-            type="text"
-            placeholder="Buscar o escribir..."
-            @focus="mostrarOpciones = true"
-            class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-          />
+        <div v-if="!creandoNuevo" class="dropdown-wrapper">
+          <div ref="dropdownWrapper" class="dropdown-wrapper relative">
+            <label class="block text-sm font-semibold text-gray-700 mb-1">
+              Medicamento
+            </label>
+            <input
+              v-model="nombre"
+              type="text"
+              placeholder="Buscar..."
+              @focus="mostrarOpciones = true"
+              class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500"
+            />
 
-          <ul
-            v-if="mostrarOpciones"
-            class="absolute mt-1 w-full bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto z-50"
-          >
-            <li
-              v-for="m in resultados"
-              :key="m.id"
-              @click="seleccionar(m.nombre)"
-              class="px-3 py-2 hover:bg-indigo-50 cursor-pointer flex items-center gap-2"
+            <ul
+              v-if="mostrarOpciones"
+              class="absolute mt-1 w-full bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto z-50"
             >
-              <Icon icon="mdi:pill" class="text-indigo-500" /> {{ m.nombre }}
-            </li>
-            <li
-              @click="seleccionar('_nuevo')"
-              class="px-3 py-2 text-green-600 font-medium hover:bg-green-50 cursor-pointer flex items-center gap-2 border-t"
-            >
-              <Icon icon="mdi:plus-circle" class="text-green-600" />
-              Nuevo medicamento
-            </li>
-          </ul>
+              <li
+                v-for="m in resultados"
+                :key="m.id"
+                @click="seleccionar(m.nombre)"
+                class="px-3 py-2 hover:bg-indigo-50 cursor-pointer flex items-center gap-2"
+              >
+                <Icon icon="mdi:pill" class="text-indigo-500" /> {{ m.nombre }}
+              </li>
+            </ul>
+          </div>
         </div>
 
-        <div v-if="creandoNuevo" class="mt-2">
+        <div v-else>
           <label class="block text-sm font-semibold text-gray-700 mb-1">
             Nombre del nuevo medicamento
           </label>
           <input
             v-model="nuevoNombre"
             type="text"
-            class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500"
             placeholder="Ej: Amoxicilina 500mg"
           />
         </div>
 
-        <div class="flex justify-end gap-3 pt-4">
+        <div class="flex justify-between pt-4">
           <button
+            v-if="!creandoNuevo"
             type="button"
-            @click="emit('cerrar')"
-            class="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg shadow hover:bg-gray-300 transition"
+            @click="creandoNuevo = true; nombre=''; error=''; mostrarOpciones=false"
+            class="flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-lg shadow hover:bg-green-200 transition"
           >
-            <Icon icon="mdi:close" /> Cancelar
+            <Icon icon="mdi:plus-circle" /> Nuevo medicamento
           </button>
-          <button
-            type="submit"
-            class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition"
-          >
-            <Icon icon="mdi:arrow-right" /> Siguiente
-          </button>
+
+          <div class="flex gap-3 ml-auto">
+            <button
+              type="button"
+              @click="emit('cerrar')"
+              class="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg shadow hover:bg-gray-300 transition"
+            >
+              <Icon icon="mdi:close" /> Cancelar
+            </button>
+            <button
+              type="submit"
+              class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition"
+            >
+              <Icon icon="mdi:arrow-right" /> Siguiente
+            </button>
+          </div>
         </div>
       </form>
 

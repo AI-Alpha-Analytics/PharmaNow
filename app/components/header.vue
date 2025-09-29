@@ -30,6 +30,13 @@
         >
           Configuración
         </NuxtLink>
+        <NuxtLink
+          to="/bodega"
+          class="px-3 py-2 font-medium rounded-md transition hover:text-gray-200"
+          active-class="bg-indigo-800 shadow-lg scale-105"
+        >
+          Bodegas
+        </NuxtLink>
       </nav>
     </div>
   </header>

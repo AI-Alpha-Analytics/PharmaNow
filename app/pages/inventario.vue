@@ -141,13 +141,24 @@ const guardarMedicamento = (payload) => {
             Gestione stock, vencimientos y lotes fácilmente
           </p>
         </div>
-        <button
-          @click="mostrarModal = true"
-          class="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition"
-        >
-          <Icon icon="mdi:plus-circle" class="text-xl" />
-          Nuevo Medicamento
-        </button>
+
+        <div class="flex gap-3">
+          <NuxtLink
+            to="/retiroMedicamento"
+            class="inline-flex items-center gap-2 px-5 py-2 bg-green-600 text-white rounded-lg shadow hover:bg-green-700 transition"
+          >
+            <Icon icon="mdi:package-variant-minus" class="text-xl" />
+            Retirar Medicamentos
+          </NuxtLink>
+
+          <button
+            @click="mostrarModal = true"
+            class="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition"
+          >
+            <Icon icon="mdi:plus-circle" class="text-xl" />
+            Agregar Medicamento o Lote
+          </button>
+        </div>
       </div>
 
       <div
