@@ -2,6 +2,8 @@
 import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import Topvencidos from '~/components/topvencidos.vue'
+import VueApexCharts from 'vue3-apexcharts'
+
 const medicamentos = ref([
   {
     id: 1,
@@ -28,6 +30,57 @@ const medicamentos = ref([
     ],
   },
 ])
+const distribucionPorcentual = computed(() => {
+  const total = todosLotes.value.length
+  if (!total) return { critico: 0, alerta: 0, seguro: 0, optimo: 0 }
+
+  const hoy = new Date()
+  const c = configMeses.value
+  const categorias = { critico: 0, alerta: 0, seguro: 0, optimo: 0 }
+
+  todosLotes.value.forEach((l) => {
+    const fechaVto = new Date(l.vencimiento)
+    const diffMeses =
+      (fechaVto.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24 * 30)
+
+    if (diffMeses <= c.critico) categorias.critico++
+    else if (diffMeses <= c.alerta) categorias.alerta++
+    else if (diffMeses <= c.seguro) categorias.seguro++
+    else categorias.optimo++
+  })
+
+  return {
+    critico: (categorias.critico / total) * 100,
+    alerta: (categorias.alerta / total) * 100,
+    seguro: (categorias.seguro / total) * 100,
+    optimo: (categorias.optimo / total) * 100,
+  }
+})
+
+const chartSeries = computed(() => [
+  distribucionPorcentual.value.critico,
+  distribucionPorcentual.value.alerta,
+  distribucionPorcentual.value.seguro,
+  distribucionPorcentual.value.optimo,
+])
+
+const COLORS = {
+  optimo: 'rgb(34,197,94)',
+  seguro: 'rgb(59,130,246)',
+  alerta: 'rgb(234,179,8)',
+  critico: 'rgb(239,68,68)',
+}
+const chartOptions = computed(() => ({
+  chart: { type: 'donut' },
+  labels: ['Crítico', 'Alerta', 'Seguro', 'Óptimo'],
+  colors: [COLORS.critico, COLORS.alerta, COLORS.seguro, COLORS.optimo],
+  legend: {
+    position: 'bottom',
+  },
+  dataLabels: {
+    formatter: (val: number) => `${val.toFixed(1)}%`,
+  },
+}))
 
 const pagina = ref(0)
 const porPagina = 5
@@ -74,7 +127,9 @@ const proximosVencidos = computed(() => {
 
 <template>
   <div class="bg-gray-50 min-h-screen px-4 py-10">
-    <div class="px-6 py-10 bg-white shadow-lg rounded-2xl max-w-5xl w-full mx-auto">
+    <div
+      class="px-6 py-10 bg-white shadow-lg rounded-2xl max-w-5xl w-full mx-auto"
+    >
       <div class="text-center mb-10">
         <h2 class="text-4xl font-extrabold text-indigo-700">
           Bienvenido a <span class="text-indigo-900">PharmaNow</span>
@@ -112,7 +167,9 @@ const proximosVencidos = computed(() => {
           </p>
         </NuxtLink>
 
-        <div class="p-6 bg-indigo-50 rounded-xl shadow-sm hover:shadow-md transition">
+        <div
+          class="p-6 bg-indigo-50 rounded-xl shadow-sm hover:shadow-md transition"
+        >
           <div class="mb-4">
             <span
               class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-indigo-100 text-indigo-600 shadow-inner"
@@ -128,7 +185,9 @@ const proximosVencidos = computed(() => {
           </p>
         </div>
 
-        <div class="p-6 bg-indigo-50 rounded-xl shadow-sm hover:shadow-md transition">
+        <div
+          class="p-6 bg-indigo-50 rounded-xl shadow-sm hover:shadow-md transition"
+        >
           <div class="mb-4">
             <span
               class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-indigo-100 text-indigo-600 shadow-inner"
@@ -158,7 +217,9 @@ const proximosVencidos = computed(() => {
 
     <div class="mt-12 max-w-6xl mx-auto grid md:grid-cols-3 gap-8">
       <div class="md:col-span-2 bg-white shadow rounded-xl p-6">
-        <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+        <h2
+          class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2"
+        >
           <Icon icon="mdi:clock-outline" class="text-indigo-600 text-2xl" />
           Últimos Lotes Ingresados
         </h2>
@@ -208,13 +269,15 @@ const proximosVencidos = computed(() => {
       </div>
 
       <div class="bg-white shadow rounded-xl p-6">
-        <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+        <h2
+          class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2"
+        >
           <Icon icon="mdi:alert-circle" class="text-red-600 text-2xl" />
           Vencidos / Próximos a Vencer
         </h2>
 
         <div v-if="!proximosVencidos.length" class="text-gray-500 text-sm">
-           No hay lotes en riesgo.
+          No hay lotes en riesgo.
         </div>
 
         <ul v-else class="space-y-2 text-sm mb-4">
@@ -224,7 +287,8 @@ const proximosVencidos = computed(() => {
             class="p-3 rounded-lg border flex items-center gap-2"
             :class="{
               'bg-red-50 border-red-200': new Date(l.vencimiento) < new Date(),
-              'bg-yellow-50 border-yellow-200': new Date(l.vencimiento) >= new Date(),
+              'bg-yellow-50 border-yellow-200':
+                new Date(l.vencimiento) >= new Date(),
             }"
           >
             <Icon
@@ -257,11 +321,38 @@ const proximosVencidos = computed(() => {
           Ver todos los productos vencidos
         </NuxtLink>
       </div>
-
     </div>
 
-    <div class="mt-12 max-w-4xl mx-auto">
-      <Topvencidos :medicamentos="medicamentos" :configMeses="configMeses" />
+    <div class="mt-12 max-w-6xl mx-auto grid md:grid-cols-2 gap-8">
+      <div class="bg-white shadow rounded-xl p-6">
+        <Topvencidos :medicamentos="medicamentos" :configMeses="configMeses" />
+      </div>
+      <div class="bg-white shadow rounded-xl p-6">
+        <h2
+          class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2"
+        >
+          <Icon icon="mdi:chart-pie" class="text-indigo-600 text-2xl" />
+          Distribución porcentual de lotes
+        </h2>
+
+        <p class="text-sm text-gray-600 mb-6">
+          Muestra qué porcentaje del total de lotes cae en cada rango de
+          vencimiento:
+          <span class="font-medium text-red-600">Crítico</span>,
+          <span class="font-medium text-yellow-600">Alerta</span>,
+          <span class="font-medium text-blue-600">Seguro</span> o
+          <span class="font-medium text-green-600">Óptimo</span>.
+        </p>
+
+        <client-only>
+          <VueApexCharts
+            type="donut"
+            height="320"
+            :options="chartOptions"
+            :series="chartSeries"
+          />
+        </client-only>
+      </div>
     </div>
   </div>
 </template>

@@ -176,20 +176,11 @@ const inconsistencia = computed(() => props.lote.cantidad > props.total)
 
         <div class="mt-6 flex justify-end gap-3">
           <button
-            class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm shadow flex items-center gap-1"
+            class="px-4 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-700 text-sm shadow flex items-center gap-1"
           >
-            <Icon icon="mdi:tray-arrow-up" /> Retirar
+            <Icon icon="mdi:tray-arrow-up" /> Ver ubicación
           </button>
-          <button
-            class="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 text-sm shadow flex items-center gap-1"
-          >
-            <Icon icon="mdi:pencil" /> Editar
-          </button>
-          <button
-            class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm shadow flex items-center gap-1"
-          >
-            <Icon icon="mdi:delete" /> Eliminar
-          </button>
+          
         </div>
       </div>
     </div>

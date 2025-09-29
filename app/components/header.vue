@@ -1,5 +1,5 @@
 <template>
-  <header class="bg-indigo-700 text-white shadow-md">
+  <header class="fixed top-0 left-0 w-full z-50 bg-indigo-700 text-white shadow-md">
     <div class="container mx-auto flex justify-between items-center py-4 px-6">
       <NuxtLink
         to="/"

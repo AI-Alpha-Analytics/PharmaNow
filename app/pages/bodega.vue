@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
+import DetalleSeccion from '~/components/detalleSeccion.vue'
 const bodegas = ref([])
 const bodegaActiva = ref(null)
 const dibujando = ref(false)
@@ -12,7 +13,70 @@ const containerRef = ref(null)
 const stageRef = ref(null)
 
 let resizeObserver = null
+
 const seccionEditando = ref(null)
+const detalleSeccion = ref(null)
+const seccionDemo = ref({
+  id: 101,
+  nombre: 'Estante A - Sección 1',
+  x: 120,
+  y: 80,
+  width: 300,
+  height: 150,
+  medicamentos: [
+    {
+      id: 1,
+      nombre: 'Paracetamol 500mg',
+      lote: 'L-001',
+      vencimiento: '2025-08-10',
+      cantidad: 120,
+    },
+    {
+      id: 2,
+      nombre: 'Ibuprofeno 400mg',
+      lote: 'L-045',
+      vencimiento: '2024-12-01',
+      cantidad: 80,
+    },
+    {
+      id: 3,
+      nombre: 'Amoxicilina 875mg',
+      lote: 'L-023',
+      vencimiento: '2026-03-15',
+      cantidad: 50,
+    },
+  ],
+  subniveles: [
+    {
+      id: 'sub-1',
+      nombre: 'Nivel Superior',
+      medicamentos: [
+        { id: 4, nombre: 'Paracetamol 500mg', lote: 'L-001', cantidad: 60 },
+        { id: 5, nombre: 'Amoxicilina 875mg', lote: 'L-023', cantidad: 30 },
+      ],
+    },
+    {
+      id: 'sub-2',
+      nombre: 'Nivel Medio',
+      medicamentos: [
+        { id: 6, nombre: 'Ibuprofeno 400mg', lote: 'L-045', cantidad: 80 },
+      ],
+    },
+    {
+      id: 'sub-3',
+      nombre: 'Nivel Inferior',
+      medicamentos: [],
+    },
+  ],
+})
+const editarSeccion = (sec) => {
+  seccionEditando.value = sec
+}
+
+const abrirDetalle = (sec) => {
+  detalleSeccion.value = sec
+}
+
 
 const onTransformEnd = (sec, e) => {
   const node = e.target
@@ -281,6 +345,15 @@ onBeforeUnmount(() => {
         <div
           class="h-[500px] md:h-[600px] lg:h-[700px] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"
         >
+        <div v-if="seccionEditando" class="absolute top-16 right-4 z-50">
+          <button
+            @click="seccionEditando = null"
+            class="flex items-center gap-1 px-3 py-1 bg-yellow-600 text-white rounded shadow hover:bg-yellow-700 transition"
+          >
+            <Icon icon="mdi:check" class="w-4 h-4" />
+            Terminar edición
+          </button>
+        </div>
           <v-stage
             ref="stageRef"
             :config="{
@@ -355,10 +428,7 @@ onBeforeUnmount(() => {
                 <v-group
                   :config="{ x: sec.x, y: sec.y, draggable: true }"
                   @dragend="moverSeccion(sec, $event)"
-                  @dblclick="
-                    seccionEditando =
-                      seccionEditando?.id === sec.id ? null : sec
-                  "
+                  @dblclick="() => { if (!seccionEditando) abrirDetalle(sec) }"
                 >
                   <v-rect
                     :ref="(el) => (sec.node = el)"
@@ -399,14 +469,21 @@ onBeforeUnmount(() => {
                     }"
                     @click="borrarSeccion(sec)"
                   />
-                  <button
-                    @click="seccionEditando = sec"
-                    class="px-2 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600"
-                  >
-                    <Icon icon="mdi:pencil" />
-                  </button>
-                </v-group>
 
+                  <v-text
+                    v-if="seccionEditando?.id !== sec.id"
+                    :config="{
+                      x: sec.width - 20,
+                      y: sec.height - 20,
+                      text: '✏️',
+                      fontSize: 14,
+                      fill: 'yellow',
+                      cursor: 'pointer',
+                    }"
+                    @click="editarSeccion(sec)"
+                  />
+
+                </v-group>
                 <v-transformer
                   v-if="seccionEditando?.id === sec.id"
                   :config="{
@@ -426,6 +503,11 @@ onBeforeUnmount(() => {
           </v-stage>
         </div>
       </div>
+      <DetalleSeccion
+                  v-if="detalleSeccion"
+                  :seccion="seccionDemo"
+                  @cerrar="detalleSeccion = null"
+                />
 
       <p v-else class="text-gray-500 italic">
         Crea una bodega y dibuja su polígono en el lienzo.

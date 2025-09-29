@@ -25,6 +25,42 @@ const medicamentos = ref([
     ],
   },
 ])
+
+const search = ref('')
+const sortBy = ref('nombre')
+
+const medicamentosFiltrados = computed(() => {
+  let lista = [...medicamentos.value]
+
+  if (search.value.trim()) {
+    lista = lista.filter((m) =>
+      m.nombre.toLowerCase().includes(search.value.toLowerCase())
+    )
+  }
+
+  if (sortBy.value === 'nombre') {
+    lista.sort((a, b) => a.nombre.localeCompare(b.nombre))
+  } else if (sortBy.value === 'vencidos') {
+    lista.sort((a, b) => {
+      const vencidosA = a.lotes.filter(
+        (l) => daysUntil(l.vencimiento) <= config.critico
+      ).length
+      const vencidosB = b.lotes.filter(
+        (l) => daysUntil(l.vencimiento) <= config.critico
+      ).length
+      return vencidosB - vencidosA
+    })
+  } else if (sortBy.value === 'proximos') {
+    lista.sort((a, b) => {
+      const diasA = Math.min(...a.lotes.map((l) => daysUntil(l.vencimiento)))
+      const diasB = Math.min(...b.lotes.map((l) => daysUntil(l.vencimiento)))
+      return diasA - diasB 
+    })
+  }
+
+  return lista
+})
+
 const modalAnalisis = ref(false)
 const seleccionado = ref(null)
 
@@ -188,6 +224,29 @@ const guardarMedicamento = (payload) => {
       </div>
 
       <div class="overflow-hidden rounded-lg border border-gray-200">
+        <div class="flex flex-wrap gap-4 items-center mb-6 w-full">
+          <div class="flex items-center border rounded-lg px-3 py-2 bg-gray-50 flex-1 min-w-[250px]">
+            <Icon icon="mdi:magnify" class="text-gray-500 mr-2" />
+            <input
+              v-model="search"
+              type="text"
+              placeholder="Buscar medicamento..."
+              class="flex-1 bg-transparent outline-none text-sm"
+            />
+          </div>
+
+          <div class="flex-1 min-w-[200px]">
+            <select
+              v-model="sortBy"
+              class="w-full px-3 py-2 border rounded-lg bg-white text-sm"
+            >
+              <option value="nombre">Ordenar por nombre</option>
+              <option value="vencidos">Ordenar por más vencidos</option>
+              <option value="proximos">Ordenar por próximos a vencer</option>
+            </select>
+          </div>
+        </div>
+
         <table class="min-w-full text-sm text-left">
           <thead class="bg-indigo-600 text-white">
             <tr>
@@ -199,7 +258,7 @@ const guardarMedicamento = (payload) => {
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200">
-            <template v-for="med in medicamentos" :key="med.id">
+            <template v-for="med in medicamentosFiltrados" :key="med.id">
               <tr
                 class="hover:bg-indigo-50 cursor-pointer"
                 @click="toggleExpand(med.id)"
@@ -216,7 +275,7 @@ const guardarMedicamento = (payload) => {
                 <td class="px-4 py-3">
                   <button
                     @click.stop="abrirAnalisis(med)"
-                    class="inline-flex items-center gap-1 px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs"
+                    class="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs"
                   >
                     <Icon icon="mdi:chart-pie" />
                   </button>
