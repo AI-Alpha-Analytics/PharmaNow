@@ -10,39 +10,73 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     async login(email, password) {
       const api = useApi()
-      try {
-        const response = await api('/auth/login', {
-          method: 'POST',
-          body: { email, password },
-        })
+      const apiResponse = await api('/auth/login', {
+        method: 'POST',
+        body: { email, password },
+      })
 
-        this.user = response
-        this.token = response.token
+      const response = apiResponse.auth ?? apiResponse
 
-        const tokenCookie = useCookie('token')
-        tokenCookie.value = response.token
+      if (!response?.token) throw new Error('Login fallido')
 
-        const userCookie = useCookie('user')
-        userCookie.value = response
-      } catch (error) {
-        console.error('❌ Error al iniciar sesión', error)
-        throw error
+      this.user = response
+      this.token = response.token
+
+      useCookie('token').value = response.token
+      useCookie('user').value = response
+
+      if (import.meta.client) {
+        const { $socketInventario } = useNuxtApp()
+
+        if ($socketInventario) {
+          $socketInventario.io.opts.auth = { token: response.token }
+
+          if ($socketInventario.connected) {
+            $socketInventario.disconnect()
+          }
+
+          $socketInventario.connect()
+        } else {
+          console.warn('⚠️ Socket no inicializado aún en login')
+        }
+      }
+
+      return response
+    },
+
+    loadFromCookie() {
+      const tokenCookie = useCookie('token')
+      const userCookie = useCookie('user')
+
+      if (tokenCookie.value) this.token = tokenCookie.value
+      if (userCookie.value) this.user = userCookie.value
+
+      if (this.token && import.meta.client) {
+        const nuxtApp = useNuxtApp()
+
+        if (nuxtApp.$socketInventario) {
+          nuxtApp.$socketInventario.io.opts.auth = { token: this.token }
+
+          if (!nuxtApp.$socketInventario.connected) {
+            nuxtApp.$socketInventario.connect()
+          }
+        } else {
+          console.warn('⚠️ Socket aún no está inicializado en loadFromCookie')
+        }
       }
     },
+
     logout() {
       this.user = null
       this.token = null
       useCookie('token').value = null
       useCookie('user').value = null
-    },
-    loadFromCookie() {
-      const tokenCookie = useCookie('token')
-      const userCookie = useCookie('user')
-      if (tokenCookie.value) {
-        this.token = tokenCookie.value
-      }
-      if (userCookie.value) {
-        this.user = userCookie.value
+
+      if (import.meta.client) {
+        const { $socketInventario } = useNuxtApp()
+        if ($socketInventario?.connected) {
+          $socketInventario.disconnect()
+        }
       }
     },
   },

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { Icon } from '@iconify/vue'
-import Topvencidos from '~/components/topvencidos.vue'
 
 const medicamentos = ref([
   {
@@ -148,7 +147,7 @@ const proximosVencidos = computed(() => {
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
         <NuxtLink
-          to="/inventario"
+          to="/"
           class="p-6 bg-indigo-50 rounded-xl shadow-sm hover:shadow-md transition block"
         >
           <div class="mb-4">
@@ -205,7 +204,7 @@ const proximosVencidos = computed(() => {
 
       <div class="mt-10 text-center">
         <NuxtLink
-          to="/test"
+          to="/"
           class="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg shadow hover:bg-indigo-700 transition"
         >
           <Icon icon="mdi:arrow-right-circle" class="text-xl" />

@@ -119,7 +119,6 @@ const eliminarRetiro = (index) => {
 
 // Confirmar retiro final
 const confirmarBoleta = () => {
-  console.log('Listado final:', retiros.value)
   alert(`Retiro confirmado:\n${JSON.stringify(retiros.value, null, 2)}`)
 }
 </script>

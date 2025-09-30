@@ -1,6 +1,6 @@
-import { useAuthStore } from '~/stores/auth'
-
-export default defineNuxtPlugin(() => {
-  const auth = useAuthStore()
-  auth.loadFromCookie()
+export default defineNuxtPlugin((nuxtApp) => {
+  nuxtApp.hook('app:mounted', () => {
+    const auth = useAuthStore()
+    auth.loadFromCookie()
+  })
 })

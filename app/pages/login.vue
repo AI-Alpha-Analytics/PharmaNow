@@ -32,11 +32,37 @@
           placeholder="Contraseña"
           class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-gray-700"
         />
+
+        <!-- Botón con loader -->
         <button
           type="submit"
-          class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow transition"
+          :disabled="loading"
+          class="w-full py-3 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Iniciar sesión
+          <span v-if="!loading">Iniciar sesión</span>
+          <span v-else class="flex items-center gap-2">
+            <svg
+              class="animate-spin h-5 w-5 text-white"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              ></circle>
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+              ></path>
+            </svg>
+            Procesando...
+          </span>
         </button>
       </form>
 
@@ -48,37 +74,30 @@
     </div>
   </div>
 </template>
-
 <script setup>
 import { ref } from 'vue'
-import { useApi } from '~/composables/useApi'
-import { useRouter } from 'vue-router'
+import { useAuthStore } from '~/stores/auth'
 
 const email = ref('')
 const password = ref('')
-const api = useApi()
+const loading = ref(false) // 👉 esto lo usamos solo para el botón
 const router = useRouter()
-definePageMeta({
-  layout: 'empty',
-})
+
+definePageMeta({ layout: 'empty' })
+
+const auth = useAuthStore()
 
 const submit = async () => {
+  if (loading.value) return
+  loading.value = true
   try {
-    const response = await api('/auth/login', {
-      method: 'POST',
-      body: { email: email.value, password: password.value },
-    })
-    if (response?.token) {
-      const tokenCookie = useCookie('token')
-      tokenCookie.value = response.token
-      const userCookie = useCookie('user')
-      userCookie.value = response
-      window.location.href = '/inventario'
-    } else {
-      alert('Respuesta inesperada')
-    }
+    const response = await auth.login(email.value, password.value)
+    await router.push('/')
   } catch (err) {
+    console.error('❌ Error en login:', err)
     alert('Credenciales inválidas')
+  } finally {
+    loading.value = false
   }
 }
 </script>

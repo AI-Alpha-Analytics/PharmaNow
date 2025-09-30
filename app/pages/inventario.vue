@@ -4,35 +4,20 @@ import { Icon } from '@iconify/vue'
 import AddMedicamento from '~/components/addMedicamento.vue'
 import LoteDetalleVue from '~/components/LoteDetalle.vue'
 import AnalisisMedicamentoVue from '~/components/AnalisisMedicamento.vue'
-const medicamentos = ref([
-  {
-    id: 1,
-    nombre: 'Paracetamol 500mg',
-    fechaEmision: '2023-01-01',
-    fechaVencimiento: '2026-05-10',
-    cantidadTotal: 350,
-    lotes: [
-      {
-        id: 'L-12345',
-        emision: '2023-01-01',
-        vencimiento: '2025-01-01',
-        cantidad: 150,
-      },
-      {
-        id: 'L-12346',
-        emision: '2023-06-01',
-        vencimiento: '2026-05-10',
-        cantidad: 200,
-      },
-    ],
-  },
-])
+
+const {
+  productos: medicamentos,
+  fetchProductos,
+  addProducto,
+  fetchTandasByProducto,
+  tandas,
+} = useInventarioSocket()
 
 const search = ref('')
 const sortBy = ref('nombre')
 
 const medicamentosFiltrados = computed(() => {
-  let lista = [...medicamentos.value]
+  let lista = [...(medicamentos.value || [])]
 
   if (search.value.trim()) {
     lista = lista.filter((m) =>
@@ -56,20 +41,56 @@ const medicamentosFiltrados = computed(() => {
     lista.sort((a, b) => {
       const diasA = Math.min(...a.lotes.map((l) => daysUntil(l.vencimiento)))
       const diasB = Math.min(...b.lotes.map((l) => daysUntil(l.vencimiento)))
-      return diasA - diasB 
+      return diasA - diasB
     })
   }
 
   return lista
 })
 
+const hoveredMed = ref(null) 
+const getSituacionTexto = (med) => {
+  const counts = { critico: 0, alerta: 0, seguro: 0, optimo: 0 }
+
+  med.lotes.forEach((lote) => {
+    const diffDays = daysUntil(lote.vencimiento)
+    if (diffDays <= config.critico) counts.critico++
+    else if (diffDays <= config.alerta) counts.alerta++
+    else if (diffDays <= config.seguro) counts.seguro++
+    else counts.optimo++
+  })
+
+  if (counts.critico) return `${counts.critico} lotes en situación Crítica`
+  if (counts.alerta) return `${counts.alerta} lotes en situación de Alerta`
+  if (counts.seguro) return `${counts.seguro} lotes en situación Segura`
+  return `${counts.optimo} lotes en situación Óptima`
+}
+
+
+
 const modalAnalisis = ref(false)
 const seleccionado = ref(null)
-
 const abrirAnalisis = (med) => {
   seleccionado.value = med
   modalAnalisis.value = true
 }
+
+const toggleExpand = (id) => {
+  if (expanded.value.includes(id)) {
+    expanded.value = expanded.value.filter((x) => x !== id)
+  } else {
+    expanded.value.push(id)
+    fetchTandasByProducto(id)
+  }
+}
+const cantidadTotal = (med) => {
+  return (med.lotes || []).reduce(
+    (acc, l) => acc + (l.cantidad ?? l.cantidadActual ?? 0),
+    0
+  )
+}
+
+
 
 const daysToMonths = (d) => Math.round(d / 30)
 const daysUntil = (isoDate) => {
@@ -87,7 +108,7 @@ const config = reactive({
   critico: 0,
 })
 
-onMounted(() => {
+onMounted(async () => {
   const saved = localStorage.getItem('inventarioConfig')
   if (saved) {
     try {
@@ -101,10 +122,33 @@ onMounted(() => {
         critico: toNum(parsed.critico, config.critico),
       })
     } catch (e) {
-      console.warn('inventarioConfig inválido, usando fallback', e)
     }
   }
+
+  await fetchProductos()
+  await Promise.all(
+    medicamentos.value.map(async (med) => {
+      const tandasProducto = await fetchTandasByProducto(med.id)
+
+      med.lotes = tandasProducto
+
+      // total de cantidades
+      med.cantidadTotal = tandasProducto.reduce(
+        (acc, l) => acc + l.cantidad,
+        0
+      )
+
+      // fecha de vencimiento más próxima
+      med.fechaVencimiento = tandasProducto.length
+        ? tandasProducto.reduce((min, l) => {
+            const fecha = new Date(l.vencimiento)
+            return fecha < min ? fecha : min
+          }, new Date(tandasProducto[0].vencimiento))
+        : null
+    })
+  )
 })
+
 
 const legend = computed(() => {
   const mCrit = daysToMonths(config.critico ?? 0)
@@ -132,14 +176,12 @@ const legend = computed(() => {
 })
 
 const isExpired = (lote) => daysUntil(lote.vencimiento) <= config.critico
-
 const getColorByDiff = (diffDays) => {
   if (diffDays <= config.critico) return 'rgb(239,68,68)'
   if (diffDays <= config.alerta) return 'rgb(234,179,8)'
   if (diffDays <= config.seguro) return 'rgb(59,130,246)'
   return 'rgb(34,197,94)'
 }
-
 const getLoteStyle = (lote) => {
   const diffDays = daysUntil(lote.vencimiento)
   const max = config.optimo
@@ -151,18 +193,20 @@ const getLoteStyle = (lote) => {
 }
 
 const expanded = ref([])
+
+
+
 const mostrarModal = ref(false)
-
-const toggleExpand = (id) => {
-  expanded.value = expanded.value.includes(id)
-    ? expanded.value.filter((x) => x !== id)
-    : [...expanded.value, id]
-}
-
-const guardarMedicamento = (payload) => {
+const guardarMedicamento = async (payload) => {
   if (payload.tipo === 'medicamento') {
-    medicamentos.value.push(payload.data)
+    const formData = new FormData()
+    formData.append('nombre', payload.data.nombre)
+    if (payload.data.imagen) {
+      formData.append('productImage', payload.data.imagen)
+    }
+    await addProducto(formData)
   }
+
   if (payload.tipo === 'lote') {
     const med = medicamentos.value.find((m) => m.id === payload.id)
     if (med) {
@@ -272,8 +316,31 @@ const guardarMedicamento = (payload) => {
                   </span>
                 </td>
                 <td class="px-4 py-3">{{ med.fechaEmision }}</td>
-                <td class="px-4 py-3">{{ med.fechaVencimiento }}</td>
-                <td class="px-4 py-3">{{ med.cantidadTotal }}</td>
+                <td class="px-4 py-3 relative">
+                  <div v-if="med.fechaVencimiento" class="flex items-center gap-2">
+                    <span
+                      class="w-3 h-3 rounded-full cursor-pointer"
+                      :style="{ backgroundColor: getColorByDiff(daysUntil(med.fechaVencimiento)) }"
+                      @mouseenter="hoveredMed = med.id"
+                      @mouseleave="hoveredMed = null"
+                    ></span>
+                    {{ new Date(med.fechaVencimiento).toLocaleDateString() }}
+
+                    <!-- Tooltip flotante -->
+                    <div
+                      v-if="hoveredMed === med.id"
+                      class="absolute left-8 top-1/2 -translate-y-1/2 z-10
+                            bg-white text-gray-800 text-xs px-3 py-2 rounded-lg shadow-lg border"
+                    >
+                      {{ getSituacionTexto(med) }}
+                    </div>
+                  </div>
+                  <span v-else>-</span>
+                </td>
+
+
+
+                <td class="px-4 py-3">{{ cantidadTotal(med) }}</td>
                 <td class="px-4 py-3">
                   <button
                     @click.stop="abrirAnalisis(med)"
@@ -288,11 +355,11 @@ const guardarMedicamento = (payload) => {
                 <td colspan="5" class="px-6 py-4">
                   <div class="grid md:grid-cols-2 gap-4">
                     <LoteDetalleVue
-                      v-for="lote in med.lotes"
+                      v-for="lote in tandas[med.id] || []"
                       :key="lote.id"
                       :lote="lote"
                       :config="config"
-                      :total="med.cantidadTotal"
+                      :total="med.cantidadTotal ?? 0"
                     />
                   </div>
                 </td>
