@@ -2,7 +2,6 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { Icon } from '@iconify/vue'
 import DetalleSeccion from '~/components/detalleSeccion.vue'
-const bodegas = ref([])
 const bodegaActiva = ref(null)
 const dibujando = ref(false)
 const previewPunto = ref(null)
@@ -88,6 +87,18 @@ const onTransformEnd = (sec, e) => {
 
   guardar()
 }
+const seleccionarBodega = async (bodega) => {
+  bodegaActiva.value = bodega
+  console.log('📦 Bodega seleccionada:', bodega)
+
+  try {
+    const ubicaciones = await fetchUbicacionesByBodega(bodega.id)
+    console.log(`📍 Ubicaciones de la bodega "${bodega.nombre}":`, ubicaciones)
+  } catch (err) {
+    console.error('❌ Error al obtener ubicaciones:', err)
+  }
+}
+
 
 const crearBodega = () => {
   const nueva = {
@@ -210,19 +221,32 @@ const borrarSeccion = (sec) => {
 const guardar = () => {
   localStorage.setItem('bodegas', JSON.stringify(bodegas.value))
 }
+const { fetchBodegas, bodegas,fetchUbicacionesByBodega } = useInventarioSocket()
 
-onMounted(() => {
-  const raw = localStorage.getItem('bodegas')
-  if (raw) {
-    bodegas.value = JSON.parse(raw).map((b) => ({
-      ...b,
-      puntos: b.puntos || [],
-      secciones: b.secciones || [],
-      cerrado: b.cerrado || false,
-    }))
-    if (bodegas.value.length > 0) bodegaActiva.value = bodegas.value[0]
+onMounted(async () => {
+  // 1) Primero intentamos cargar desde API
+  try {
+    bodegas.value = await fetchBodegas()
+    if (bodegas.value.length > 0) {
+      bodegaActiva.value = bodegas.value[0]
+    }
+    console.log('📦 Bodegas cargadas desde API:', bodegas.value)
+  } catch (err) {
+    console.error('❌ Error cargando bodegas desde API:', err)
+    // fallback a localStorage si falla
+    const raw = localStorage.getItem('bodegas')
+    if (raw) {
+      bodegas.value = JSON.parse(raw).map((b) => ({
+        ...b,
+        puntos: b.puntos || [],
+        secciones: b.secciones || [],
+        cerrado: b.cerrado || false,
+      }))
+      if (bodegas.value.length > 0) bodegaActiva.value = bodegas.value[0]
+    }
   }
 
+  // 2) ResizeObserver para el canvas
   resizeObserver = new ResizeObserver((entries) => {
     for (const entry of entries) {
       if (stageRef.value?.getStage) {
@@ -238,6 +262,7 @@ onMounted(() => {
     resizeObserver.observe(containerRef.value)
   }
 })
+
 
 onBeforeUnmount(() => {
   if (resizeObserver && containerRef.value) {
@@ -263,22 +288,37 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <div class="flex flex-wrap gap-3 mb-6">
-        <button
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <div
           v-for="b in bodegas"
           :key="b.id"
-          @click="bodegaActiva = b"
-          class="px-3 py-2 rounded-lg border flex items-center gap-2"
-          :class="
-            bodegaActiva?.id === b.id
-              ? 'bg-indigo-100 border-indigo-400 text-indigo-700'
-              : 'hover:bg-gray-100'
-          "
+          @click="seleccionarBodega(b)"
+          class="cursor-pointer rounded-lg border p-4 shadow-sm hover:shadow-md transition"
+          :class="bodegaActiva?.id === b.id 
+            ? 'bg-indigo-50 border-indigo-400' 
+            : 'bg-white border-gray-200'"
         >
-          <Icon icon="mdi:warehouse" class="w-4 h-4" />
-          {{ b.nombre }}
-        </button>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-lg font-bold text-indigo-700 flex items-center gap-2">
+              <Icon icon="mdi:warehouse" class="w-5 h-5 text-indigo-600" />
+              {{ b.nombre }}
+            </h3>
+            <span
+              v-if="b.isDeleted"
+              class="px-2 py-0.5 text-xs bg-red-100 text-red-600 rounded-full"
+            >
+              Eliminada
+            </span>
+          </div>
+          <p class="text-sm text-gray-600">
+            📍 {{ b.direccion || 'Sin dirección' }}
+          </p>
+          <p class="text-sm text-gray-600">
+            👤 Encargado: <span class="font-medium">{{ b.nombreEncargado || 'N/A' }}</span>
+          </p>
+        </div>
       </div>
+
 
       <div v-if="dibujando" class="flex gap-2 mb-4">
         <button

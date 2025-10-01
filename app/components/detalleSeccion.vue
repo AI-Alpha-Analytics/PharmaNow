@@ -136,42 +136,44 @@ const cerrarDetalleNivel = () => (nivelDetalle.value = null)
           </div>
 
           <div class="relative flex-1 min-h-0 overflow-auto rounded">
-            <GridLayout
-              v-model:layout="layout"
-              :col-num="4"
-              :row-height="120"
-              :margin="[10, 10]"
-              :is-draggable="true"
-              :is-resizable="true"
-              :vertical-compact="true"
-              class="bg-gray-100 p-2 rounded min-h-full"
-            >
-              <GridItem
-                v-for="nivel in seccion.subniveles"
-                :key="nivel.id"
-                :i="String(nivel.id)"
-                :x="layout.find((l) => l.i === String(nivel.id))?.x"
-                :y="layout.find((l) => l.i === String(nivel.id))?.y"
-                :w="layout.find((l) => l.i === String(nivel.id))?.w"
-                :h="layout.find((l) => l.i === String(nivel.id))?.h"
-                class="bg-white border rounded shadow p-3 relative cursor-pointer flex flex-col items-center justify-center"
-                @click="seleccionado = nivel.id"
-                @dblclick="abrirDetalleNivel(nivel)"
+            <ClientOnly>
+              <GridLayout
+                v-model:layout="layout"
+                :col-num="4"
+                :row-height="120"
+                :margin="[10, 10]"
+                :is-draggable="true"
+                :is-resizable="true"
+                :vertical-compact="true"
+                class="bg-gray-100 p-2 rounded min-h-full"
               >
-                <button
-                  @click.stop="eliminarNivel(nivel.id)"
-                  class="absolute top-2 right-2 text-red-600"
+                <GridItem
+                  v-for="nivel in seccion.subniveles"
+                  :key="nivel.id"
+                  :i="String(nivel.id)"
+                  :x="layout.find((l) => l.i === String(nivel.id))?.x"
+                  :y="layout.find((l) => l.i === String(nivel.id))?.y"
+                  :w="layout.find((l) => l.i === String(nivel.id))?.w"
+                  :h="layout.find((l) => l.i === String(nivel.id))?.h"
+                  class="bg-white border rounded shadow p-3 relative cursor-pointer flex flex-col items-center justify-center"
+                  @click="seleccionado = nivel.id"
+                  @dblclick="abrirDetalleNivel(nivel)"
                 >
-                  <Icon icon="mdi:delete" class="w-5 h-5" />
-                </button>
-                <h4 class="text-center font-semibold text-indigo-700">
-                  {{ nivel.nombre }}
-                </h4>
-                <p class="text-sm text-gray-500 text-center">
-                  {{ nivel.medicamentos?.length || 0 }} medicamentos
-                </p>
-              </GridItem>
-            </GridLayout>
+                  <button
+                    @click.stop="eliminarNivel(nivel.id)"
+                    class="absolute top-2 right-2 text-red-600"
+                  >
+                    <Icon icon="mdi:delete" class="w-5 h-5" />
+                  </button>
+                  <h4 class="text-center font-semibold text-indigo-700">
+                    {{ nivel.nombre }}
+                  </h4>
+                  <p class="text-sm text-gray-500 text-center">
+                    {{ nivel.medicamentos?.length || 0 }} medicamentos
+                  </p>
+                </GridItem>
+              </GridLayout>
+            </ClientOnly>
           </div>
         </div>
       </div>

@@ -5,13 +5,17 @@ import AddMedicamento from '~/components/addMedicamento.vue'
 import LoteDetalleVue from '~/components/LoteDetalle.vue'
 import AnalisisMedicamentoVue from '~/components/AnalisisMedicamento.vue'
 
+// SOCKET para leer
 const {
   productos: medicamentos,
   fetchProductos,
-  addProducto,
   fetchTandasByProducto,
   tandas,
 } = useInventarioSocket()
+
+// REST para crear
+const { addProducto,addTanda, productos } = useInventario()
+
 
 const search = ref('')
 const sortBy = ref('nombre')
@@ -19,28 +23,31 @@ const sortBy = ref('nombre')
 const medicamentosFiltrados = computed(() => {
   let lista = [...(medicamentos.value || [])]
 
+  // Filtro seguro
   if (search.value.trim()) {
-    lista = lista.filter((m) =>
-      m.nombre.toLowerCase().includes(search.value.toLowerCase())
-    )
+    const criterio = search.value.toLowerCase()
+    lista = lista.filter((m) => m?.nombre?.toLowerCase().includes(criterio))
   }
 
+  // Orden seguro
   if (sortBy.value === 'nombre') {
-    lista.sort((a, b) => a.nombre.localeCompare(b.nombre))
+    lista.sort((a, b) =>
+      (a?.nombre || '').localeCompare(b?.nombre || '')
+    )
   } else if (sortBy.value === 'vencidos') {
     lista.sort((a, b) => {
-      const vencidosA = a.lotes.filter(
+      const vencidosA = (a.lotes || []).filter(
         (l) => daysUntil(l.vencimiento) <= config.critico
       ).length
-      const vencidosB = b.lotes.filter(
+      const vencidosB = (b.lotes || []).filter(
         (l) => daysUntil(l.vencimiento) <= config.critico
       ).length
       return vencidosB - vencidosA
     })
   } else if (sortBy.value === 'proximos') {
     lista.sort((a, b) => {
-      const diasA = Math.min(...a.lotes.map((l) => daysUntil(l.vencimiento)))
-      const diasB = Math.min(...b.lotes.map((l) => daysUntil(l.vencimiento)))
+      const diasA = Math.min(...(a.lotes || []).map((l) => daysUntil(l.vencimiento)))
+      const diasB = Math.min(...(b.lotes || []).map((l) => daysUntil(l.vencimiento)))
       return diasA - diasB
     })
   }
@@ -197,23 +204,61 @@ const expanded = ref([])
 
 
 const mostrarModal = ref(false)
+
 const guardarMedicamento = async (payload) => {
+  console.log("📦 [guardarMedicamento] payload:", payload)
+
   if (payload.tipo === 'medicamento') {
-    const formData = new FormData()
-    formData.append('nombre', payload.data.nombre)
-    if (payload.data.imagen) {
-      formData.append('productImage', payload.data.imagen)
+  try {
+    console.log("🚀 Enviando a endpoint createProducto...")
+    const nuevoProducto = await addProducto({
+      nombre: payload.data.nombre,
+      descripcion: payload.data.descripcion || "",
+    })
+    console.log("✅ Producto creado:", nuevoProducto)
+
+    const lote = payload.data.lotes?.[0]
+    if (lote) {
+      console.log("📤 Payload tanda:", {
+        idProducto: nuevoProducto.id,
+        idBodega: lote.idBodega,
+        idUbicacion: lote.idUbicacion,
+        cantidadIngresada: lote.cantidad, 
+        fechaVencimiento: lote.vencimiento 
+      })
+
+      const nuevaTanda = await addTanda({
+        idProducto: nuevoProducto.id,
+        idBodega: lote.idBodega,
+        idUbicacion: lote.idUbicacion,
+        cantidadIngresada: lote.cantidad,
+        fechaVencimiento: lote.vencimiento,
+      })
+      console.log("✅ Tanda creada:", nuevaTanda)
     }
-    await addProducto(formData)
+  } catch (err) {
+    console.error("❌ Error al crear producto o tanda:", err)
+    alert("Error al guardar medicamento")
   }
+}
 
   if (payload.tipo === 'lote') {
-    const med = medicamentos.value.find((m) => m.id === payload.id)
-    if (med) {
-      med.lotes.push(payload.lote)
-      med.cantidadTotal = med.lotes.reduce((acc, l) => acc + l.cantidad, 0)
+    try {
+      console.log("🚀 Enviando a endpoint createTanda...")
+      const nuevaTanda = await addTanda({
+        idProducto: payload.id,
+        idBodega: payload.lote.idBodega,
+        idUbicacion: payload.lote.idUbicacion,
+        cantidadIngresada: payload.lote.cantidad,
+        fechaVencimiento: payload.lote.vencimiento 
+      })
+      console.log("✅ Tanda creada:", nuevaTanda)
+    } catch (err) {
+      console.error("❌ Error al crear tanda:", err)
+      alert("Error al guardar lote")
     }
   }
+
 }
 </script>
 
