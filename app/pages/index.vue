@@ -1,45 +1,60 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import { useInventarioSocket } from '~/composables/useInventarioSocket'
 
-const medicamentos = ref([
-  {
-    id: 1,
-    nombre: 'Paracetamol 500mg',
-    lotes: [
-      { id: 'L-001', fechaIngreso: '2025-06-01',cantidad:10, vencimiento: '2025-08-01' },
-      { id: 'L-002', fechaIngreso: '2025-06-15',cantidad:10,  vencimiento: '2025-07-15' },
-      { id: 'L-003', fechaIngreso: '2025-07-01',cantidad:10,  vencimiento: '2026-01-01' },
-    ],
-  },
-  {
-    id: 2,
-    nombre: 'Ibuprofeno 400mg',
-    lotes: [
-      { id: 'L-004', fechaIngreso: '2025-07-05',cantidad:10,  vencimiento: '2025-10-10' },
-      { id: 'L-005', fechaIngreso: '2025-07-10',cantidad:10,  vencimiento: '2025-09-01' },
-    ],
-  },
-  {
-    id: 3,
-    nombre: 'Amoxicilina 875mg',
-    lotes: [
-      { id: 'L-006', fechaIngreso: '2025-07-20',cantidad:10,  vencimiento: '2025-09-20' },
-    ],
-  },
-])
+const { productos, tandasRecientes, fetchProductos, fetchTandasRecientes,fetchTandasByProducto } = useInventarioSocket()
+
+// Configuración de vencimientos
+const configMeses = ref({ optimo: 24, seguro: 12, alerta: 6, critico: 0 })
+const hoy = new Date()
+
+// ================================
+// 🔹 Paginación
+// ================================
+const pagina = ref(0)
+const porPagina = 5
+
+// ================================
+// 🔹 Cargar datos desde socket
+// ================================
+onMounted(async () => {
+  const prods = await fetchProductos()
+
+  // cargar tandas de cada producto
+  for (const p of prods) {
+    await fetchTandasByProducto(p.id)
+  }
+
+  // si además quieres las tandas recientes
+  await fetchTandasRecientes(10)
+})
+
+// ================================
+// 🔹 Todos los lotes (desde productos)
+// ================================
+const todosLotes = computed<any[]>(() =>
+  (productos.value as any[]).flatMap((m: any) =>
+    (m.lotes as any[]).map((l: any) => ({
+      ...l,
+      medicamento: m.nombre,
+    }))
+  )
+)
+
+// ================================
+// 🔹 Distribución porcentual
+// ================================
 const distribucionPorcentual = computed(() => {
   const total = todosLotes.value.length
   if (!total) return { critico: 0, alerta: 0, seguro: 0, optimo: 0 }
 
-  const hoy = new Date()
   const c = configMeses.value
   const categorias = { critico: 0, alerta: 0, seguro: 0, optimo: 0 }
 
-  todosLotes.value.forEach((l) => {
+  todosLotes.value.forEach((l: any) => {
     const fechaVto = new Date(l.vencimiento)
-    const diffMeses =
-      (fechaVto.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24 * 30)
+    const diffMeses = (fechaVto.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24 * 30)
 
     if (diffMeses <= c.critico) categorias.critico++
     else if (diffMeses <= c.alerta) categorias.alerta++
@@ -72,50 +87,31 @@ const chartOptions = computed(() => ({
   chart: { type: 'donut' },
   labels: ['Crítico', 'Alerta', 'Seguro', 'Óptimo'],
   colors: [COLORS.critico, COLORS.alerta, COLORS.seguro, COLORS.optimo],
-  legend: {
-    position: 'bottom',
-  },
+  legend: { position: 'bottom' },
   dataLabels: {
     formatter: (val: number) => `${val.toFixed(1)}%`,
   },
 }))
 
-const pagina = ref(0)
-const porPagina = 5
-
-const todosLotes = computed(() =>
-  medicamentos.value.flatMap((m) =>
-    m.lotes.map((l) => ({
-      ...l,
-      medicamento: m.nombre,
-    }))
-  )
-)
-
+// ================================
+// 🔹 Últimas tandas (paginadas)
+// ================================
 const totalPaginas = computed(() =>
-  Math.ceil(todosLotes.value.length / porPagina)
+  Math.ceil(((tandasRecientes.value as any[]) || []).length / porPagina)
 )
 
-const ultimosPaginados = computed(() => {
+const ultimosPaginados = computed<any[]>(() => {
   const start = pagina.value * porPagina
-  return todosLotes.value
-    .slice()
-    .sort(
-      (a, b) =>
-        new Date(b.fechaIngreso).getTime() - new Date(a.fechaIngreso).getTime()
-    )
-    .slice(start, start + porPagina)
+  return ((tandasRecientes.value as any[]) || []).slice(start, start + porPagina)
 })
 
-const configMeses = ref({ optimo: 24, seguro: 12, alerta: 6, critico: 0 })
-
-const hoy = new Date()
-
-const proximosVencidos = computed(() => {
-  return todosLotes.value.filter((l) => {
+// ================================
+// 🔹 Próximos a vencer
+// ================================
+const proximosVencidos = computed<any[]>(() => {
+  return (todosLotes.value as any[]).filter((l: any) => {
     const fechaVto = new Date(l.vencimiento)
-    const diffMeses =
-      (fechaVto.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24 * 30)
+    const diffMeses = (fechaVto.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24 * 30)
     if (diffMeses <= configMeses.value.critico) return true
     if (diffMeses <= configMeses.value.alerta) return true
     return false
@@ -226,7 +222,7 @@ const proximosVencidos = computed(() => {
           <thead class="bg-gray-100 text-gray-600">
             <tr>
               <th class="p-2">Medicamento</th>
-              <th class="p-2">Lote</th>
+              <th class="p-2">Cantidad Ingresada</th>
               <th class="p-2">Ingreso</th>
               <th class="p-2">Vencimiento</th>
             </tr>
@@ -238,8 +234,8 @@ const proximosVencidos = computed(() => {
               class="border-t hover:bg-gray-50"
             >
               <td class="p-2">{{ l.medicamento }}</td>
-              <td class="p-2">{{ l.id }}</td>
-              <td class="p-2">{{ l.fechaIngreso }}</td>
+              <td class="p-2">{{ l.cantidadIngresada }}</td>
+              <td class="p-2">{{ l.fechaLlegada }}</td>
               <td class="p-2">{{ l.vencimiento }}</td>
             </tr>
           </tbody>
@@ -278,11 +274,14 @@ const proximosVencidos = computed(() => {
           No hay lotes en riesgo.
         </div>
 
-        <ul v-else class="space-y-2 text-sm mb-4">
+        <ul
+          v-else
+          class="space-y-2 text-sm mb-4 max-h-64 overflow-y-auto pr-2 custom-scrollbar"
+        >
           <li
             v-for="l in proximosVencidos"
             :key="l.id"
-            class="p-3 rounded-lg border flex items-center gap-2"
+            class="p-3 rounded-lg border flex items-center gap-2 transition hover:bg-gray-50"
             :class="{
               'bg-red-50 border-red-200': new Date(l.vencimiento) < new Date(),
               'bg-yellow-50 border-yellow-200':
@@ -295,35 +294,42 @@ const proximosVencidos = computed(() => {
                   ? 'mdi:close-circle'
                   : 'mdi:alert'
               "
-              class="text-lg"
+              class="text-lg flex-shrink-0"
               :class="
                 new Date(l.vencimiento) < new Date()
                   ? 'text-red-600'
                   : 'text-yellow-600'
               "
             />
-            <div>
-              <p class="font-medium text-gray-800">
-                {{ l.medicamento }} — Lote {{ l.id }}
+            <div class="flex-1">
+              <p class="font-medium text-gray-800 truncate">
+                {{ l.medicamento }}
               </p>
-              <p class="text-xs text-gray-500">Vence {{ l.vencimiento }}</p>
+              <p class="text-xs text-gray-500">
+                Vence {{ l.vencimiento }}
+              </p>
             </div>
           </li>
         </ul>
 
-        <NuxtLink
-          to="/productosVencidos"
-          class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg shadow hover:bg-red-700 transition"
-        >
-          <Icon icon="mdi:eye" class="text-lg" />
-          Ver todos los productos vencidos
-        </NuxtLink>
+        <!-- Footer con link -->
+        <div v-if="proximosVencidos.length > 5" class="text-center mt-2">
+          <NuxtLink
+            to="/productosVencidos"
+            class="inline-flex items-center gap-1 text-indigo-600 text-sm font-medium hover:underline"
+          >
+            <Icon icon="mdi:eye" class="text-base" />
+            Ver todos ({{ proximosVencidos.length }})
+          </NuxtLink>
+        </div>
+
       </div>
     </div>
 
     <div class="mt-12 max-w-6xl mx-auto grid md:grid-cols-2 gap-8">
       <div class="bg-white shadow rounded-xl p-6">
-        <Topvencidos :medicamentos="medicamentos" :configMeses="configMeses" />
+        <Topvencidos :medicamentos="productos" :configMeses="configMeses" />
+
       </div>
       <div class="bg-white shadow rounded-xl p-6">
         <h2

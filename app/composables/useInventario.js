@@ -4,14 +4,9 @@ export const useInventario = () => {
   const productos = ref([])
   const bodegas = ref([])
   const ubicaciones = ref({})
-
   // ================================
   // 🔹 Productos (REST solo CRUD)
   // ================================
-  const fetchProductos = async () => {
-    productos.value = await Inventario.getProductos()
-    return productos.value
-  }
 
   const addProducto = async (data) => {
     const nuevo = await Inventario.createProducto(data)
@@ -21,7 +16,6 @@ export const useInventario = () => {
   const addTanda = async (data) => {
     return await Inventario.createTanda(data)
   }
-
   const updateProducto = async (id, data) => {
     const actualizado = await Inventario.updateProducto(id, data)
     const idx = productos.value.findIndex((p) => p.id === id)
@@ -76,7 +70,6 @@ export const useInventario = () => {
     bodegas,
     ubicaciones,
     // productos
-    fetchProductos,
     addProducto,
     addTanda,
     updateProducto,

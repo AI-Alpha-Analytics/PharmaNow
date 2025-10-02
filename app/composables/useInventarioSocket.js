@@ -5,6 +5,7 @@ export const useInventarioSocket = () => {
   const bodegas = ref([])
   const ubicaciones = ref({})
   const tandas = ref({})
+  const tandasRecientes = ref([])
 
   const safeOn = (event, cb) => {
     if ($socketInventario) $socketInventario.on(event, cb)
@@ -76,12 +77,63 @@ export const useInventarioSocket = () => {
           vencimiento: l.fechaVencimiento,
           cantidad: l.cantidad ?? l.cantidadActual ?? 0,
         }))
+
+        // 🔹 Guardar en estructura global
         tandas.value[idProducto] = normalizadas
+
+        // 🔹 También vincular al producto correspondiente
+        const producto = productos.value.find((p) => p.id === idProducto)
+        if (producto) {
+          producto.lotes = normalizadas
+          producto.cantidadTotal = normalizadas.reduce(
+            (acc, l) => acc + l.cantidad,
+            0
+          )
+          producto.fechaVencimiento = normalizadas.length
+            ? normalizadas.reduce((min, l) => {
+                const fecha = new Date(l.vencimiento)
+                return fecha < min ? fecha : min
+              }, new Date(normalizadas[0].vencimiento))
+            : null
+        }
+
         resolve(normalizadas)
       })
     })
   }
 
+  // ================================
+  // 🔹 Tandas recientes (nuevo)
+  // ================================
+  const fetchTandasRecientes = async (limit = 5) => {
+    tandasRecientes.value = [] // limpia antes
+
+    // 1. Cargar productos primero
+    const prods = await fetchProductos()
+
+    // 2. Iterar cada producto y pedir sus tandas
+    for (const producto of prods) {
+      await fetchTandasByProducto(producto.id).then((lts) => {
+        tandasRecientes.value.push(
+          ...lts.map((t) => ({
+            ...t,
+            medicamento: producto.nombre,
+          }))
+        )
+      })
+    }
+
+    // 3. Ordenar por fecha y limitar
+    tandasRecientes.value = tandasRecientes.value
+      .sort(
+        (a, b) =>
+          new Date(b.fechaIngreso || b.fechaLlegada).getTime() -
+          new Date(a.fechaIngreso || a.fechaLlegada).getTime()
+      )
+      .slice(0, limit)
+
+    return tandasRecientes.value
+  }
   // ================================
   // 🔹 Eventos en tiempo real
   // ================================
@@ -152,10 +204,13 @@ export const useInventarioSocket = () => {
     bodegas,
     ubicaciones,
     tandas,
+    tandasRecientes,
+
     // actions
     fetchProductos,
     fetchBodegas,
     fetchUbicacionesByBodega,
     fetchTandasByProducto,
+    fetchTandasRecientes,
   }
 }
