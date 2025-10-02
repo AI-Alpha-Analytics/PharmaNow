@@ -148,32 +148,20 @@ const legend = computed(() => {
   const mSeg = daysToMonths(config.seguro ?? 0)
 
   return [
-    { key: 'vencido', color: 'rgb(107,114,128)', text: 'Vencido: < 0 días' },
-    { key: 'optimo', color: 'rgb(34,197,94)', text: `Óptimo: > ${mSeg} meses` },
-    {
-      key: 'seguro',
-      color: 'rgb(59,130,246)',
-      text: `Seguro: ${mAlert}–${mSeg} meses`,
-    },
-    {
-      key: 'alerta',
-      color: 'rgb(234,179,8)',
-      text: `Alerta: ${mCrit}–${mAlert} meses`,
-    },
-    {
-      key: 'critico',
-      color: 'rgb(239,68,68)',
-      text: 'Crítico: vencido o ≤ 0 días',
-    },
+    { key: 'vencido', color: '#dc2626', text: 'Vencido: < 0 días' }, 
+    { key: 'critico', color: '#fb923c', text: `Crítico: ≤ ${mCrit} días` }, 
+    { key: 'alerta', color: '#facc15', text: `Alerta: ${mCrit}–${mAlert} días` }, 
+    { key: 'seguro', color: '#16a34a', text: `Seguro: ${mAlert}–${mSeg} meses` }, 
+    { key: 'optimo', color: '#3b82f6', text: `Óptimo: > ${mSeg} meses` }, 
   ]
 })
 
 const getColorByDiff = (diffDays) => {
-  if (diffDays < 0) return 'rgb(107,114,128)' 
-  if (diffDays <= config.critico) return 'rgb(239,68,68)'
-  if (diffDays <= config.alerta) return 'rgb(234,179,8)'
-  if (diffDays <= config.seguro) return 'rgb(59,130,246)'
-  return 'rgb(34,197,94)'
+  if (diffDays < 0) return '#dc2626'
+  if (diffDays <= config.critico) return '#fb923c'
+  if (diffDays <= config.alerta) return '#facc15' 
+  if (diffDays <= config.seguro) return '#16a34a'
+  return '#3b82f6'
 }
 
 const getSituacionTexto = (med) => {

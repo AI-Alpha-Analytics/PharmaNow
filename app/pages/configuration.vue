@@ -28,7 +28,7 @@ const onInput = (key: keyof typeof ui.value, e: Event) => {
 
 const normalizeAndSync = () => {
   const v = configMeses.value
-  v.vencido = -1 
+  v.vencido = -1
   v.critico = Math.max(0, v.critico | 0)
   v.alerta = Math.max(v.critico, v.alerta | 0)
   v.seguro = Math.max(v.alerta, v.seguro | 0)
@@ -88,21 +88,21 @@ onMounted(() => {
 })
 
 const COLORS = {
-  vencido: 'rgb(107,114,128)',
-  critico: 'rgb(239,68,68)',
-  alerta: 'rgb(234,179,8)',
-  seguro: 'rgb(59,130,246)',
-  optimo: 'rgb(34,197,94)',
-}
-const BORDERS = {
-  vencido: '#374151',
-  critico: '#b91c1c',
-  alerta: '#b45309',
-  seguro: '#1e40af',
-  optimo: '#047857',
-  rest: '#cbd5e1',
+  vencido: '#ef4444',
+  critico: '#f97316',
+  alerta: '#facc15',
+  seguro: '#16a34a',
+  optimo: '#3b82f6',
 }
 
+const BORDERS = {
+  vencido: '#b91c1c',
+  critico: '#c2410c',
+  alerta: '#ca8a04',
+  seguro: '#166534',
+  optimo: '#1d4ed8',
+  rest: '#cbd5e1',
+}
 
 const segStyle = (
   widthPct: number,

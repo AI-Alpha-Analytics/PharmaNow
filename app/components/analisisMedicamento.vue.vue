@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, watchEffect } from 'vue'
 import { Icon } from '@iconify/vue'
 
 const props = defineProps({
@@ -9,6 +9,7 @@ const props = defineProps({
 
 const emit = defineEmits(['cerrar'])
 
+// Helpers
 const daysUntil = (isoDate) => {
   if (!isoDate) return 0
   const today = new Date()
@@ -27,22 +28,24 @@ const getEstado = (lote) => {
 }
 
 const colores = {
-  optimo: '#22c55e',
-  seguro: '#3b82f6',
-  alerta: '#eab308',
-  critico: '#ef4444', 
+  vencido: '#dc2626',   // rojo más oscuro (red-600)
+  critico: '#fb923c',   // naranjo brillante (orange-400)
+  alerta: '#facc15',    // amarillo más puro (yellow-400)
+  seguro: '#16a34a',    // verde oscuro (green-600)
+  optimo: '#3b82f6',    // azul (blue-500)
 }
+
 
 const lotes = computed(() => props.medicamento?.lotes ?? [])
 
+// Agrupar por estado
 const lotesPorEstado = computed(() => {
   const grupos = { optimo: [], seguro: [], alerta: [], critico: [] }
-  lotes.value.forEach((l) => {
-    grupos[getEstado(l)].push(l)
-  })
+  lotes.value.forEach((l) => grupos[getEstado(l)].push(l))
   return grupos
 })
 
+// Porcentajes
 const porcentajes = computed(() => {
   const total = lotes.value.length || 0
   if (total === 0) return { optimo: 0, seguro: 0, alerta: 0, critico: 0 }
@@ -54,48 +57,57 @@ const porcentajes = computed(() => {
   }
 })
 
+// Total unidades
 const totalUnidades = computed(() =>
   lotes.value.reduce((acc, l) => acc + (l.cantidad || 0), 0)
 )
 
-const usoPromedioMensual = computed(() => {
-  const consumos = lotes.value.flatMap((l) => l.consumos || [])
-  if (!consumos.length) return 0
-  const total = consumos.reduce((acc, c) => acc + c.cantidad, 0)
-  const meses = new Set(consumos.map((c) => c.mes)).size
-  return Math.round(total / (meses || 1))
+// Vencimiento más próximo y promedio
+const masProximo = computed(() => {
+  if (!lotes.value.length) return null
+  const ordenados = [...lotes.value].sort(
+    (a, b) => new Date(a.vencimiento) - new Date(b.vencimiento)
+  )
+  return ordenados[0]
 })
 
-const usoUltimos3Meses = computed(() => {
-  const ahora = new Date()
-  const ultimos3 = lotes.value.flatMap((l) => l.consumos || [])
-    .filter((c) => {
-      const [year, month] = c.mes.split('-').map(Number)
-      const fecha = new Date(year, month - 1)
-      const diffMeses =
-        (ahora.getFullYear() - fecha.getFullYear()) * 12 +
-        (ahora.getMonth() - fecha.getMonth())
-      return diffMeses <= 2
-    })
-
-  if (!ultimos3.length) return 0
-  const total = ultimos3.reduce((acc, c) => acc + c.cantidad, 0)
-  const meses = new Set(ultimos3.map((c) => c.mes)).size
-  return Math.round(total / (meses || 1))
+const promedioVencimientoDias = computed(() => {
+  if (!lotes.value.length) return 0
+  const totalDias = lotes.value.reduce(
+    (acc, l) => acc + daysUntil(l.vencimiento),
+    0
+  )
+  return Math.round(totalDias / lotes.value.length)
 })
 
+// Últimas tandas agregadas (simulamos que tienen fecha de creación)
+const ultimasTandas = computed(() =>
+  [...lotes.value]
+    .sort((a, b) => new Date(b.emision) - new Date(a.emision))
+    .slice(0, 3)
+)
+
+// Recomendaciones
+const recomendacion = computed(() => {
+  if (porcentajes.value.critico > 0) {
+    return '⚠️ Hay lotes críticos: planificar reposición urgente.'
+  }
+  if (porcentajes.value.alerta >= 30) {
+    return '⚠️ Más del 30% en estado de alerta: considerar compra anticipada.'
+  }
+  if (promedioVencimientoDias.value < 180) {
+    return '📅 Los lotes en promedio vencen en menos de 6 meses.'
+  }
+  return '✅ Stock en buen estado, no se requieren compras inmediatas.'
+})
+
+// Chart
 const chartOptions = computed(() => ({
   chart: { type: 'pie' },
   labels: ['Óptimo', 'Seguro', 'Alerta', 'Crítico'],
   colors: [colores.optimo, colores.seguro, colores.alerta, colores.critico],
-  legend: {
-    position: 'right',
-    fontSize: '14px',
-    labels: { colors: '#374151' },
-  },
-  tooltip: {
-    y: { formatter: (val) => `${val}%` },
-  },
+  legend: { position: 'right', fontSize: '14px', labels: { colors: '#374151' } },
+  tooltip: { y: { formatter: (val) => `${val}%` } },
 }))
 
 const chartSeries = computed(() => [
@@ -109,104 +121,136 @@ const chartSeries = computed(() => [
 <template>
   <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
     <div
-      class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto p-8 relative"
+      class="bg-white rounded-2xl shadow-xl max-w-6xl w-full max-h-[90vh] flex flex-col"
     >
-      <button
-        class="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-        @click="emit('cerrar')"
+      <!-- HEADER -->
+      <div
+        class="flex items-center justify-between px-6 py-4 border-b bg-white sticky top-0 z-10 rounded-t-2xl"
       >
-        <Icon icon="mdi:close" class="text-2xl" />
-      </button>
-
-      <div class="mb-6 border-b pb-4">
-        <h3 class="text-3xl font-bold text-indigo-700 flex items-center gap-2">
-          <Icon icon="mdi:chart-pie" class="text-indigo-500 text-3xl" />
-          Análisis de:
-          <span class="text-gray-800">{{ medicamento.nombre }}</span>
-        </h3>
-        <p class="text-gray-500 mt-1">
-          Distribución de estados de vencimiento y consumos recientes
-        </p>
+        <div>
+          <h3 class="text-2xl font-bold text-indigo-700 flex items-center gap-2">
+            <Icon icon="lucide:pie-chart" class="w-6 h-6 text-indigo-500" />
+            Análisis de {{ medicamento.nombre }}
+          </h3>
+          <p class="text-sm text-gray-500">
+            Estado de stock, vencimientos y recomendaciones de compra
+          </p>
+        </div>
+        <button
+          class="text-gray-400 hover:text-gray-600 transition"
+          @click="emit('cerrar')"
+        >
+          <Icon icon="lucide:x" class="w-6 h-6" />
+        </button>
       </div>
 
-      <div class="grid md:grid-cols-3 gap-6 mb-10">
-        <div class="p-4 bg-gray-50 rounded-xl shadow-sm text-center">
-          <p class="text-sm text-gray-500">Unidades Totales</p>
-          <p class="text-2xl font-bold text-indigo-700">
-            {{ totalUnidades }}
-          </p>
-        </div>
-        <div class="p-4 bg-gray-50 rounded-xl shadow-sm text-center">
-          <p class="text-sm text-gray-500">Promedio Mensual</p>
-          <p class="text-2xl font-bold text-indigo-700">
-            {{ usoPromedioMensual }} u.
-          </p>
-        </div>
-        <div class="p-4 bg-gray-50 rounded-xl shadow-sm text-center">
-          <p class="text-sm text-gray-500">Últimos 3 meses</p>
-          <p class="text-2xl font-bold text-indigo-700">
-            {{ usoUltimos3Meses }} u.
-          </p>
-        </div>
-      </div>
-
-      <div class="grid md:grid-cols-2 gap-6 mb-10">
-        <VueApexCharts
-          type="pie"
-          height="320"
-          :options="chartOptions"
-          :series="chartSeries"
-        />
-
-        <div class="flex flex-col justify-center space-y-3">
-          <template v-for="(valor, estado) in porcentajes" :key="estado">
-            <div class="flex items-center gap-3">
-              <span
-                class="w-4 h-4 rounded-full"
-                :style="{ backgroundColor: colores[estado] }"
-              ></span>
-              <span class="capitalize w-20">{{ estado }}</span>
-              <span class="font-semibold text-gray-800">
-                {{ valor }}% ({{ lotesPorEstado[estado].length }} lotes)
+      <!-- BODY -->
+      <div class="p-6 overflow-y-auto">
+        <!-- KPIs -->
+        <div class="grid md:grid-cols-3 gap-6 mb-10">
+          <div
+            class="bg-gradient-to-br from-indigo-50 to-white p-5 rounded-xl border border-indigo-100 shadow-sm"
+          >
+            <p class="text-sm text-gray-500">Unidades Totales</p>
+            <p class="text-3xl font-extrabold text-indigo-700">
+              {{ totalUnidades }}
+            </p>
+          </div>
+          <div
+            class="bg-gradient-to-br from-emerald-50 to-white p-5 rounded-xl border border-emerald-100 shadow-sm"
+          >
+            <p class="text-sm text-gray-500">Próximo Vencimiento</p>
+            <p class="text-lg font-semibold text-gray-800 mt-1">
+              <span v-if="masProximo">
+                {{ new Date(masProximo.vencimiento).toLocaleDateString() }}
+                <span class="text-gray-500">
+                  ({{ daysUntil(masProximo.vencimiento) }} días)
+                </span>
               </span>
-            </div>
-          </template>
+              <span v-else>-</span>
+            </p>
+          </div>
+          <div
+            class="bg-gradient-to-br from-amber-50 to-white p-5 rounded-xl border border-amber-100 shadow-sm"
+          >
+            <p class="text-sm text-gray-500">Promedio de Vencimiento</p>
+            <p class="text-lg font-semibold text-gray-800 mt-1">
+              ~{{ promedioVencimientoDias }} días
+            </p>
+          </div>
         </div>
-      </div>
 
-      <div>
-        <h4 class="text-lg font-bold text-gray-800 mb-3">
-          Detalle de lotes por estado
-        </h4>
-        <div class="grid md:grid-cols-2 gap-6">
-          <template v-for="(lotes, estado) in lotesPorEstado" :key="estado">
-            <div
-              v-if="lotes.length"
-              class="p-4 rounded-lg border shadow-sm"
-              :style="{ borderColor: colores[estado] + '55' }"
+        <!-- Distribución -->
+        <div class="grid md:grid-cols-2 gap-8 mb-12">
+          <VueApexCharts
+            type="pie"
+            height="320"
+            :options="chartOptions"
+            :series="chartSeries"
+          />
+          <div class="flex flex-col justify-center space-y-4">
+            <template v-for="(valor, estado) in porcentajes" :key="estado">
+              <div class="flex items-center gap-3">
+                <span
+                  class="w-4 h-4 rounded-full border"
+                  :style="{ backgroundColor: colores[estado] }"
+                ></span>
+                <span class="capitalize text-gray-600 w-24">{{ estado }}</span>
+                <span class="font-semibold text-gray-900">
+                  {{ valor }}% ({{ lotesPorEstado[estado].length }} lotes)
+                </span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Últimas tandas -->
+        <div class="mb-10">
+          <h4
+            class="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2"
+          >
+            <Icon icon="lucide:package" class="w-5 h-5 text-indigo-600" />
+            Últimas tandas añadidas
+          </h4>
+          <ul class="space-y-3">
+            <li
+              v-for="l in ultimasTandas"
+              :key="l.id"
+              class="flex items-center justify-between bg-gray-50 px-4 py-3 rounded-lg border border-gray-200"
             >
-              <h5
-                class="font-semibold mb-2 flex items-center gap-2 capitalize"
-                :style="{ color: colores[estado] }"
-              >
-                <Icon icon="mdi:circle" :style="{ color: colores[estado] }" />
-                {{ estado }} ({{ lotes.length }})
-              </h5>
-              <ul class="pl-6 list-disc text-sm text-gray-700 space-y-1">
-                <li v-for="l in lotes" :key="l.id">
-                  Lote <strong>{{ l.id }}</strong> — vence
-                  <span class="font-medium">{{ l.vencimiento }}</span> —
-                  {{ l.cantidad }} unidades
-                  <span
-                    v-if="estado === 'critico'"
-                    class="text-red-600 font-medium"
-                  >
-                    → Mandar a merma
-                  </span>
-                </li>
-              </ul>
-            </div>
-          </template>
+              <div>
+                <p class="font-medium text-gray-800">Lote {{ l.id }}</p>
+                <p class="text-xs text-gray-500">
+                  Emitido: {{ new Date(l.fechaLlegada).toLocaleDateString() }}
+                </p>
+              </div>
+              <div class="text-right">
+                <p class="text-sm text-gray-700">{{ l.cantidad }} unidades</p>
+                <p class="text-xs text-gray-500">
+                  Vence: {{ new Date(l.vencimiento).toLocaleDateString() }}
+                </p>
+              </div>
+            </li>
+            <li v-if="!ultimasTandas.length" class="text-gray-500 italic">
+              No hay tandas registradas
+            </li>
+          </ul>
+        </div>
+
+        <!-- Recomendación -->
+        <div
+          class="p-5 rounded-xl border shadow-sm"
+          :class="{
+            'bg-red-50 border-red-200 text-red-800': recomendacion.includes('urgente'),
+            'bg-amber-50 border-amber-200 text-amber-800': recomendacion.includes('anticipada'),
+            'bg-emerald-50 border-emerald-200 text-emerald-800': recomendacion.includes('Stock en buen estado'),
+          }"
+        >
+          <div class="flex items-center gap-2 mb-2">
+            <Icon icon="lucide:lightbulb" class="w-5 h-5" />
+            <p class="font-semibold">Recomendación</p>
+          </div>
+          <p>{{ recomendacion }}</p>
         </div>
       </div>
     </div>
