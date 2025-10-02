@@ -56,22 +56,6 @@ const medicamentosFiltrados = computed(() => {
 })
 
 const hoveredMed = ref(null) 
-const getSituacionTexto = (med) => {
-  const counts = { critico: 0, alerta: 0, seguro: 0, optimo: 0 }
-
-  med.lotes.forEach((lote) => {
-    const diffDays = daysUntil(lote.vencimiento)
-    if (diffDays <= config.critico) counts.critico++
-    else if (diffDays <= config.alerta) counts.alerta++
-    else if (diffDays <= config.seguro) counts.seguro++
-    else counts.optimo++
-  })
-
-  if (counts.critico) return `${counts.critico} lotes en situación Crítica`
-  if (counts.alerta) return `${counts.alerta} lotes en situación de Alerta`
-  if (counts.seguro) return `${counts.seguro} lotes en situación Segura`
-  return `${counts.optimo} lotes en situación Óptima`
-}
 
 
 
@@ -109,10 +93,11 @@ const daysUntil = (isoDate) => {
 }
 
 const config = reactive({
-  optimo: 24 * 30,
-  seguro: 12 * 30,
-  alerta: 6 * 30,
+  vencido: -1,
   critico: 0,
+  alerta: 6 * 30,
+  seguro: 12 * 30,
+  optimo: 24 * 30,
 })
 
 onMounted(async () => {
@@ -123,12 +108,14 @@ onMounted(async () => {
       const toNum = (v, fallback) =>
         Number.isFinite(Number(v)) ? Number(v) : fallback
       Object.assign(config, {
-        optimo: toNum(parsed.optimo, config.optimo),
-        seguro: toNum(parsed.seguro, config.seguro),
-        alerta: toNum(parsed.alerta, config.alerta),
+        vencido: -1,
         critico: toNum(parsed.critico, config.critico),
+        alerta: toNum(parsed.alerta, config.alerta),
+        seguro: toNum(parsed.seguro, config.seguro),
+        optimo: toNum(parsed.optimo, config.optimo),
       })
     } catch (e) {
+      console.warn("⚠️ Error leyendo inventarioConfig:", e)
     }
   }
 
@@ -139,13 +126,11 @@ onMounted(async () => {
 
       med.lotes = tandasProducto
 
-      // total de cantidades
       med.cantidadTotal = tandasProducto.reduce(
-        (acc, l) => acc + l.cantidad,
+        (acc, l) => acc + (l.cantidad ?? 0),
         0
       )
 
-      // fecha de vencimiento más próxima
       med.fechaVencimiento = tandasProducto.length
         ? tandasProducto.reduce((min, l) => {
             const fecha = new Date(l.vencimiento)
@@ -163,6 +148,7 @@ const legend = computed(() => {
   const mSeg = daysToMonths(config.seguro ?? 0)
 
   return [
+    { key: 'vencido', color: 'rgb(107,114,128)', text: 'Vencido: < 0 días' },
     { key: 'optimo', color: 'rgb(34,197,94)', text: `Óptimo: > ${mSeg} meses` },
     {
       key: 'seguro',
@@ -182,21 +168,31 @@ const legend = computed(() => {
   ]
 })
 
-const isExpired = (lote) => daysUntil(lote.vencimiento) <= config.critico
 const getColorByDiff = (diffDays) => {
+  if (diffDays < 0) return 'rgb(107,114,128)' 
   if (diffDays <= config.critico) return 'rgb(239,68,68)'
   if (diffDays <= config.alerta) return 'rgb(234,179,8)'
   if (diffDays <= config.seguro) return 'rgb(59,130,246)'
   return 'rgb(34,197,94)'
 }
-const getLoteStyle = (lote) => {
-  const diffDays = daysUntil(lote.vencimiento)
-  const max = config.optimo
-  const porcentaje = Math.max(0, Math.min(100, (diffDays / max) * 100))
-  return {
-    width: porcentaje + '%',
-    backgroundColor: getColorByDiff(diffDays),
-  }
+
+const getSituacionTexto = (med) => {
+  const counts = { vencido: 0, critico: 0, alerta: 0, seguro: 0, optimo: 0 }
+
+  med.lotes.forEach((lote) => {
+    const diffDays = daysUntil(lote.vencimiento)
+    if (diffDays < 0) counts.vencido++
+    else if (diffDays <= config.critico) counts.critico++
+    else if (diffDays <= config.alerta) counts.alerta++
+    else if (diffDays <= config.seguro) counts.seguro++
+    else counts.optimo++
+  })
+
+  if (counts.vencido) return `${counts.vencido} lotes Vencidos`
+  if (counts.critico) return `${counts.critico} lotes Críticos`
+  if (counts.alerta) return `${counts.alerta} lotes en Alerta`
+  if (counts.seguro) return `${counts.seguro} lotes Seguros`
+  return `${counts.optimo} lotes Óptimos`
 }
 
 const expanded = ref([])

@@ -3,15 +3,17 @@ import { ref, computed, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 
 const configMeses = ref({
-  optimo: 24,
-  seguro: 12,
-  alerta: 6,
+  vencido: -1,
   critico: 0,
+  alerta: 6,
+  seguro: 12,
+  optimo: 24,
 })
 const defaults = { ...configMeses.value }
 const toDays = (m: number) => Math.max(0, Math.round(m * 30))
 
 const ui = ref({
+  vencido: String(configMeses.value.vencido),
   critico: String(configMeses.value.critico),
   alerta: String(configMeses.value.alerta),
   seguro: String(configMeses.value.seguro),
@@ -26,12 +28,14 @@ const onInput = (key: keyof typeof ui.value, e: Event) => {
 
 const normalizeAndSync = () => {
   const v = configMeses.value
+  v.vencido = -1 
   v.critico = Math.max(0, v.critico | 0)
   v.alerta = Math.max(v.critico, v.alerta | 0)
   v.seguro = Math.max(v.alerta, v.seguro | 0)
   v.optimo = Math.max(v.seguro, v.optimo | 0)
 
   ui.value = {
+    vencido: String(v.vencido),
     critico: String(v.critico),
     alerta: String(v.alerta),
     seguro: String(v.seguro),
@@ -73,28 +77,32 @@ onMounted(() => {
   try {
     const d = JSON.parse(raw)
     configMeses.value = {
-      optimo: Math.round((Number(d.optimo) || defaults.optimo * 30) / 30),
-      seguro: Math.round((Number(d.seguro) || defaults.seguro * 30) / 30),
-      alerta: Math.round((Number(d.alerta) || defaults.alerta * 30) / 30),
+      vencido: -1,
       critico: Math.round((Number(d.critico) ?? defaults.critico * 30) / 30),
+      alerta: Math.round((Number(d.alerta) || defaults.alerta * 30) / 30),
+      seguro: Math.round((Number(d.seguro) || defaults.seguro * 30) / 30),
+      optimo: Math.round((Number(d.optimo) || defaults.optimo * 30) / 30),
     }
     normalizeAndSync()
   } catch {}
 })
 
 const COLORS = {
-  optimo: 'rgb(34,197,94)',
-  seguro: 'rgb(59,130,246)',
-  alerta: 'rgb(234,179,8)',
+  vencido: 'rgb(107,114,128)',
   critico: 'rgb(239,68,68)',
+  alerta: 'rgb(234,179,8)',
+  seguro: 'rgb(59,130,246)',
+  optimo: 'rgb(34,197,94)',
 }
 const BORDERS = {
-  optimo: '#047857',
-  seguro: '#1e40af',
-  alerta: '#b45309',
+  vencido: '#374151',
   critico: '#b91c1c',
+  alerta: '#b45309',
+  seguro: '#1e40af',
+  optimo: '#047857',
   rest: '#cbd5e1',
 }
+
 
 const segStyle = (
   widthPct: number,
@@ -145,9 +153,16 @@ const ticks = computed(() => {
   const pos = (m: number) => `${(m / max) * 100}%`
   return [
     {
+      key: 'vencido',
+      m: c.vencido,
+      label: `Vencido (<0)`,
+      color: COLORS.vencido,
+      left: '0%',
+    },
+    {
       key: 'critico',
       m: c.critico,
-      label: `Crítico (${c.critico}m)`,
+      label: `Crítico (≤${c.critico}m)`,
       color: COLORS.critico,
       left: pos(c.critico),
     },
@@ -431,6 +446,13 @@ defineExpose({
         </div>
 
         <div class="mt-4 flex flex-wrap gap-4 text-sm">
+          <span class="inline-flex items-center gap-2">
+            <span
+              class="w-3 h-3 rounded-full"
+              :style="{ backgroundColor: COLORS.vencido }"
+            ></span>
+            Vencido (&lt;0)
+          </span>
           <span class="inline-flex items-center gap-2">
             <span
               class="w-3 h-3 rounded-full"
