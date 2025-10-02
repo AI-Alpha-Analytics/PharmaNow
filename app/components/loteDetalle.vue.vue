@@ -91,7 +91,6 @@ const inconsistencia = computed(() => props.lote.cantidad > props.total)
         <span :class="inconsistencia ? 'text-red-600 font-bold' : ''">
           {{ lote.cantidad }}
         </span>
-        / {{ total }}
       </p>
     </div>
 

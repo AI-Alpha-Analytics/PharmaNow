@@ -341,6 +341,7 @@ const guardarMedicamento = async (payload) => {
         <table class="min-w-full text-sm text-left">
           <thead class="bg-indigo-600 text-white">
             <tr>
+              <th class="px-4 py-3 text-center text-gray-200 w-8">#</th>
               <th class="px-4 py-3">Medicamento</th>
               <th class="px-4 py-3">Fecha Emisión</th>
               <th class="px-4 py-3">Fecha Vencimiento</th>
@@ -354,12 +355,18 @@ const guardarMedicamento = async (payload) => {
                 class="hover:bg-indigo-50 cursor-pointer"
                 @click="toggleExpand(med.id)"
               >
-                <td class="px-4 py-3 font-medium text-indigo-800">
-                  {{ med.nombre }}
-                  <span class="ml-2 text-xs text-gray-500">
-                    ({{ expanded.includes(med.id) ? '▲' : '▼' }})
+                <!-- 🔹 Columna de flechas -->
+                <td class="px-4 py-3 text-center text-gray-500 w-8">
+                  <span class="text-sm">
+                    {{ expanded.includes(med.id) ? '▲' : '▼' }}
                   </span>
                 </td>
+
+                <!-- 🔹 Nombre del medicamento -->
+                <td class="px-4 py-3 font-medium text-indigo-800">
+                  {{ med.nombre }}
+                </td>
+
                 <td class="px-4 py-3">{{ med.fechaEmision }}</td>
                 <td class="px-4 py-3 relative">
                   <div v-if="med.fechaVencimiento" class="flex items-center gap-2">
@@ -383,8 +390,6 @@ const guardarMedicamento = async (payload) => {
                   <span v-else>-</span>
                 </td>
 
-
-
                 <td class="px-4 py-3">{{ cantidadTotal(med) }}</td>
                 <td class="px-4 py-3">
                   <button
@@ -396,9 +401,10 @@ const guardarMedicamento = async (payload) => {
                 </td>
               </tr>
 
+              <!-- 🔹 Fila expandida -->
               <tr v-if="expanded.includes(med.id)" class="bg-gray-50">
-                <td colspan="5" class="px-6 py-4">
-                  <div class="grid md:grid-cols-2 gap-4">
+                <td colspan="6" class="px-6 py-4">
+                  <div v-if="(tandas[med.id] || []).length" class="grid md:grid-cols-2 gap-4">
                     <LoteDetalleVue
                       v-for="lote in tandas[med.id] || []"
                       :key="lote.id"
@@ -406,6 +412,13 @@ const guardarMedicamento = async (payload) => {
                       :config="config"
                       :total="med.cantidadTotal ?? 0"
                     />
+                  </div>
+                  <div
+                    v-else
+                    class="flex items-center justify-center gap-2 text-gray-500 text-sm py-6 border border-dashed border-gray-300 rounded-lg bg-white"
+                  >
+                    <Icon icon="mdi:archive-remove-outline" class="text-2xl text-gray-400" />
+                    No existen lotes registrados para este medicamento.
                   </div>
                 </td>
               </tr>
