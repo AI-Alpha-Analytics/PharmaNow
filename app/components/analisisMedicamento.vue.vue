@@ -22,25 +22,26 @@ const daysUntil = (isoDate) => {
 const getEstado = (lote) => {
   const d = daysUntil(lote?.vencimiento)
   if (d <= props.config.critico) return 'critico'
+  if (d <= props.config.riesgo) return 'riesgo'
   if (d <= props.config.alerta) return 'alerta'
   if (d <= props.config.seguro) return 'seguro'
   return 'optimo'
 }
 
 const colores = {
-  vencido: '#dc2626',   // rojo más oscuro (red-600)
-  critico: '#fb923c',   // naranjo brillante (orange-400)
-  alerta: '#facc15',    // amarillo más puro (yellow-400)
-  seguro: '#16a34a',    // verde oscuro (green-600)
-  optimo: '#3b82f6',    // azul (blue-500)
+  vencido: '#9333ea',   // morado
+  critico: '#ef4444',   // rojo
+  riesgo:  '#ee9452',   // naranjo
+  alerta:  '#facc15',   // amarillo
+  seguro:  '#16a34a',   // verde
+  optimo:  '#3b82f6',   // azul
 }
-
 
 const lotes = computed(() => props.medicamento?.lotes ?? [])
 
 // Agrupar por estado
 const lotesPorEstado = computed(() => {
-  const grupos = { optimo: [], seguro: [], alerta: [], critico: [] }
+  const grupos = { optimo: [], seguro: [], alerta: [], riesgo: [], critico: [] }
   lotes.value.forEach((l) => grupos[getEstado(l)].push(l))
   return grupos
 })
@@ -53,6 +54,7 @@ const porcentajes = computed(() => {
     optimo: Math.round((lotesPorEstado.value.optimo.length / total) * 100),
     seguro: Math.round((lotesPorEstado.value.seguro.length / total) * 100),
     alerta: Math.round((lotesPorEstado.value.alerta.length / total) * 100),
+    riesgo: Math.round((lotesPorEstado.value.riesgo.length / total) * 100),
     critico: Math.round((lotesPorEstado.value.critico.length / total) * 100),
   }
 })
@@ -104,8 +106,8 @@ const recomendacion = computed(() => {
 // Chart
 const chartOptions = computed(() => ({
   chart: { type: 'pie' },
-  labels: ['Óptimo', 'Seguro', 'Alerta', 'Crítico'],
-  colors: [colores.optimo, colores.seguro, colores.alerta, colores.critico],
+  labels: ['Óptimo', 'Seguro', 'Alerta', 'Riesgo','Crítico'],
+  colors: [colores.optimo, colores.seguro, colores.alerta,colores.riesgo, colores.critico],
   legend: { position: 'right', fontSize: '14px', labels: { colors: '#374151' } },
   tooltip: { y: { formatter: (val) => `${val}%` } },
 }))
@@ -114,6 +116,7 @@ const chartSeries = computed(() => [
   porcentajes.value.optimo,
   porcentajes.value.seguro,
   porcentajes.value.alerta,
+  porcentajes.value.riesgo,
   porcentajes.value.critico,
 ])
 </script>

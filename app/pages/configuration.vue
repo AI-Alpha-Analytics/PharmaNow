@@ -15,7 +15,7 @@ const configMeses = ref({
 const COLORS = {
   vencido: '#9333ea', // morado
   critico: '#ef4444', // rojo
-  riesgo:  '#f97316', // naranjo
+  riesgo:  '#ee9452', // naranjo
   alerta:  '#facc15', // amarillo
   seguro:  '#16a34a', // verde
   optimo:  '#3b82f6', // azul

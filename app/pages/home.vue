@@ -146,7 +146,7 @@ const chartSeries = computed(() => [
 const COLORS = {
   vencido: '#9333ea',
   critico: '#ef4444',
-  riesgo: '#f97316',
+  riesgo: '#ee9452',
   alerta: '#facc15',
   seguro: '#16a34a',
   optimo: '#3b82f6',

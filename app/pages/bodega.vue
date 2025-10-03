@@ -68,6 +68,114 @@ const seccionDemo = ref({
     },
   ],
 })
+
+const ubicacionesActivas = ref([])
+const ubicacionesPorBodega = ref({})
+const detalleUbicacion = ref(null)
+
+const construirNombreUbicacion = (ubicacion, index) => {
+  return (
+    ubicacion?.descripcion ||
+    ubicacion?.nombre ||
+    ubicacion?.codigo ||
+    ubicacion?.alias ||
+    `Ubicacion ${index + 1}`
+  )
+}
+
+const generarCoordenadasSimuladas = (total, index) => {
+  const cantidad = total || 1
+  const columnas = Math.max(1, Math.ceil(Math.sqrt(cantidad)))
+  const separacionX = 150
+  const separacionY = 120
+  const margenX = 80
+  const margenY = 80
+  const columna = index % columnas
+  const fila = Math.floor(index / columnas)
+  return {
+    x: margenX + columna * separacionX,
+    y: margenY + fila * separacionY,
+  }
+}
+
+const generarCoordenadasEnBodega = (bodega, index, total) => {
+  const puntos = Array.isArray(bodega?.puntos) ? bodega.puntos : []
+
+  if (!puntos.length) {
+    // fallback a coordenadas simuladas si no hay puntos definidos
+    return generarCoordenadasSimuladas(total, index)
+  }
+
+  const xs = puntos.filter((_, i) => i % 2 === 0)
+  const ys = puntos.filter((_, i) => i % 2 === 1)
+
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
+
+  const cols = Math.ceil(Math.sqrt(total))
+  const rows = Math.ceil(total / cols)
+
+  const cellW = (maxX - minX) / cols
+  const cellH = (maxY - minY) / rows
+
+  const col = index % cols
+  const row = Math.floor(index / cols)
+
+  return {
+    x: minX + col * cellW + cellW / 2,
+    y: minY + row * cellH + cellH / 2,
+  }
+}
+
+
+const decorarUbicaciones = (lista = [], bodega) => {
+  const total = lista.length || 1
+  return lista.map((ubicacion, index) => {
+    const coords = generarCoordenadasEnBodega(bodega, index, total)
+    const nombre = construirNombreUbicacion(ubicacion, index)
+    return {
+      ...ubicacion,
+      nombre,
+      x: ubicacion?.x ?? ubicacion?.posX ?? coords.x,
+      y: ubicacion?.y ?? ubicacion?.posY ?? coords.y,
+      _key: ubicacion?.id ?? `${nombre}-${index}`,
+      simulatedPosition: ubicacion?.x == null && ubicacion?.posX == null,
+    }
+  })
+}
+
+
+const eliminarUbicacion = (ubicacion) => {
+  if (!ubicacion) return
+  ubicacionesActivas.value = ubicacionesActivas.value.filter(
+    (u) => u._key !== ubicacion._key
+  )
+  if (detalleUbicacion.value?._key === ubicacion._key) {
+    detalleUbicacion.value = null
+  }
+  const idActual = bodegaActiva.value?.id
+  if (idActual != null) {
+    const copia = { ...ubicacionesPorBodega.value }
+    if (copia[idActual]) {
+      copia[idActual] = copia[idActual].filter(
+        (u) => u._key !== ubicacion._key
+      )
+    }
+    ubicacionesPorBodega.value = copia
+  }
+}
+
+const abrirUbicacion = (ubic) => {
+  if (!ubic) return
+  detalleUbicacion.value = ubic
+}
+
+const cerrarDetalleUbicacion = () => {
+  detalleUbicacion.value = null
+}
+
 const editarSeccion = (sec) => {
   seccionEditando.value = sec
 }
@@ -88,14 +196,23 @@ const onTransformEnd = (sec, e) => {
   guardar()
 }
 const seleccionarBodega = async (bodega) => {
+  if (!bodega) return
   bodegaActiva.value = bodega
-  console.log('📦 Bodega seleccionada:', bodega)
+  dibujando.value = false
+  previewPunto.value = null
+  detalleUbicacion.value = null
 
   try {
     const ubicaciones = await fetchUbicacionesByBodega(bodega.id)
-    console.log(`📍 Ubicaciones de la bodega "${bodega.nombre}":`, ubicaciones)
+    const decoradas = decorarUbicaciones(ubicaciones || [], bodega)
+    ubicacionesPorBodega.value = {
+      ...ubicacionesPorBodega.value,
+      [bodega.id]: decoradas,
+    }
+    ubicacionesActivas.value = decoradas
   } catch (err) {
-    console.error('❌ Error al obtener ubicaciones:', err)
+    console.error('Error al obtener ubicaciones:', err)
+    ubicacionesActivas.value = ubicacionesPorBodega.value[bodega.id] || []
   }
 }
 
@@ -110,14 +227,30 @@ const crearBodega = () => {
   }
   bodegas.value.push(nueva)
   bodegaActiva.value = nueva
+  ubicacionesActivas.value = []
+  detalleUbicacion.value = null
+  ubicacionesPorBodega.value = {
+    ...ubicacionesPorBodega.value,
+    [nueva.id]: [],
+  }
   dibujando.value = true
   guardar()
 }
 
-const borrarBodega = (id) => {
+
+const borrarBodega = async (id) => {
   bodegas.value = bodegas.value.filter((b) => b.id !== id)
+  const copia = { ...ubicacionesPorBodega.value }
+  delete copia[id]
+  ubicacionesPorBodega.value = copia
   if (bodegaActiva.value?.id === id) {
-    bodegaActiva.value = bodegas.value.length > 0 ? bodegas.value[0] : null
+    if (bodegas.value.length > 0) {
+      await seleccionarBodega(bodegas.value[0])
+    } else {
+      bodegaActiva.value = null
+      ubicacionesActivas.value = []
+      detalleUbicacion.value = null
+    }
   }
   guardar()
 }
@@ -221,18 +354,18 @@ const borrarSeccion = (sec) => {
 const guardar = () => {
   localStorage.setItem('bodegas', JSON.stringify(bodegas.value))
 }
-const { fetchBodegas, bodegas,fetchUbicacionesByBodega } = useInventarioSocket()
+const { fetchBodegas, bodegas, fetchUbicacionesByBodega } = useInventarioSocket()
 
 onMounted(async () => {
   // 1) Primero intentamos cargar desde API
   try {
     bodegas.value = await fetchBodegas()
     if (bodegas.value.length > 0) {
-      bodegaActiva.value = bodegas.value[0]
+      await seleccionarBodega(bodegas.value[0])
     }
-    console.log('📦 Bodegas cargadas desde API:', bodegas.value)
+    console.log('Bodegas cargadas desde API:', bodegas.value)
   } catch (err) {
-    console.error('❌ Error cargando bodegas desde API:', err)
+    console.error('Error cargando bodegas desde API:', err)
     // fallback a localStorage si falla
     const raw = localStorage.getItem('bodegas')
     if (raw) {
@@ -242,7 +375,11 @@ onMounted(async () => {
         secciones: b.secciones || [],
         cerrado: b.cerrado || false,
       }))
-      if (bodegas.value.length > 0) bodegaActiva.value = bodegas.value[0]
+      if (bodegas.value.length > 0) {
+        bodegaActiva.value = bodegas.value[0]
+        const cache = ubicacionesPorBodega.value[bodegaActiva.value.id] || []
+        ubicacionesActivas.value = cache
+      }
     }
   }
 
@@ -262,8 +399,6 @@ onMounted(async () => {
     resizeObserver.observe(containerRef.value)
   }
 })
-
-
 onBeforeUnmount(() => {
   if (resizeObserver && containerRef.value) {
     resizeObserver.unobserve(containerRef.value)
@@ -539,8 +674,142 @@ onBeforeUnmount(() => {
                   }"
                 />
               </template>
+              <template v-for="ubic in ubicacionesActivas" :key="ubic._key">
+                <v-group
+                  :config="{ x: ubic.x, y: ubic.y }"
+                  @click="abrirUbicacion(ubic)"
+                  @dblclick="() => {
+                    if (ubic.simulatedPosition) {
+                      detalleSeccion.value = seccionDemo // de momento usamos demo
+                    } else {
+                      abrirUbicacion(ubic)
+                    }
+                  }"
+                >
+                  <v-circle
+                    :config="{
+                      radius: 14,
+                      fill: ubic.simulatedPosition ? '#fbbf24' : '#ee9452',
+                      stroke: ubic.simulatedPosition ? '#d97706' : '#c2410c',
+                      strokeWidth: 2,
+                      shadowBlur: 8,
+                    }"
+                  />
+                  <v-text
+                    :config="{
+                      x: 20,
+                      y: -6,
+                      text: ubic.nombre,
+                      fontSize: 13,
+                      fontStyle: 'bold',
+                      fill: '#1f2937',
+                    }"
+                  />
+                </v-group>
+              </template>
+
             </v-layer>
           </v-stage>
+        </div>
+      </div>
+      <div
+        v-if="ubicacionesActivas.length"
+        class="mt-8"
+      >
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-xl font-semibold text-indigo-700 flex items-center gap-2">
+            <Icon icon="mdi:map-marker" class="w-5 h-5 text-indigo-600" />
+            Ubicaciones en bodega
+          </h3>
+          <span class="text-sm text-gray-500">
+            {{ ubicacionesActivas.length }} ubicaciones
+          </span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div
+            v-for="ubic in ubicacionesActivas"
+            :key="ubic._key + '-card'"
+            class="relative rounded-lg border border-indigo-100 bg-white/80 backdrop-blur-sm p-4 shadow-sm hover:shadow-md transition"
+            @click="abrirUbicacion(ubic)"
+          >
+            <button
+              class="absolute top-3 right-3 text-xs font-semibold text-red-500 hover:text-red-600"
+              @click.stop="eliminarUbicacion(ubic)"
+              type="button"
+            >
+              X
+            </button>
+            <div class="flex items-start gap-3">
+              <div
+                class="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100 text-orange-600 font-semibold"
+              >
+                {{ (ubic.nombre || 'U').charAt(0).toUpperCase() }}
+              </div>
+              <div class="space-y-1 text-sm">
+                <h4 class="text-base font-semibold text-gray-800">
+                  {{ ubic.nombre }}
+                </h4>
+                <p
+                  v-if="ubic.descripcion && ubic.descripcion !== ubic.nombre"
+                  class="text-gray-600"
+                >
+                  {{ ubic.descripcion }}
+                </p>
+                <p v-if="ubic.codigo" class="text-xs uppercase tracking-wide text-indigo-500">
+                  Codigo: {{ ubic.codigo }}
+                </p>
+                <p v-if="ubic.capacidad" class="text-xs text-gray-500">
+                  Capacidad: {{ ubic.capacidad }}
+                </p>
+                <p v-if="ubic.simulatedPosition" class="text-xs text-gray-400 italic">
+                  Posicion mostrada de forma simulada
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="detalleUbicacion" class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <div class="lg:col-span-2 rounded-xl border border-indigo-100 bg-white/90 backdrop-blur-sm p-5 shadow-lg">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xl font-semibold text-indigo-700">
+              Detalle de {{ detalleUbicacion.nombre }}
+            </h3>
+            <button
+              class="text-sm text-indigo-500 hover:text-indigo-600 font-semibold"
+              type="button"
+              @click="cerrarDetalleUbicacion()"
+            >
+              Cerrar
+            </button>
+          </div>
+          <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
+            <div>
+              <dt class="font-semibold text-gray-900">Descripcion</dt>
+              <dd>{{ detalleUbicacion.descripcion || 'Sin descripcion' }}</dd>
+            </div>
+            <div>
+              <dt class="font-semibold text-gray-900">Codigo</dt>
+              <dd>{{ detalleUbicacion.codigo || 'Sin codigo' }}</dd>
+            </div>
+            <div>
+              <dt class="font-semibold text-gray-900">Capacidad</dt>
+              <dd>{{ detalleUbicacion.capacidad ?? 'Desconocida' }}</dd>
+            </div>
+            <div>
+              <dt class="font-semibold text-gray-900">Posicion</dt>
+              <dd>{{ detalleUbicacion.x }}, {{ detalleUbicacion.y }} <span v-if="detalleUbicacion.simulatedPosition" class="italic text-xs text-gray-500">(simulada)</span></dd>
+            </div>
+          </dl>
+        </div>
+        <div class="rounded-xl border border-gray-200 bg-white p-5 shadow" v-if="detalleUbicacion?.medicamentos?.length">
+          <h4 class="text-lg font-semibold text-gray-800 mb-3">Medicamentos almacenados</h4>
+          <ul class="space-y-2 text-sm text-gray-700">
+            <li v-for="med in detalleUbicacion.medicamentos" :key="med.id || med.nombre" class="flex justify-between border-b border-gray-100 pb-2">
+              <span class="font-medium">{{ med.nombre || 'Producto' }}</span>
+              <span class="text-gray-500">{{ med.cantidad ?? med.stock ?? '?' }} unidades</span>
+            </li>
+          </ul>
         </div>
       </div>
       <DetalleSeccion
