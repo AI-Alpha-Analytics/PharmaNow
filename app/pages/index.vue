@@ -4,9 +4,16 @@ import { Icon } from '@iconify/vue'
 import { useInventarioSocket } from '~/composables/useInventarioSocket'
 
 const { productos, tandasRecientes, fetchProductos, fetchTandasRecientes,fetchTandasByProducto } = useInventarioSocket()
-
+const totalLotes = computed(() => todosLotes.value.length)
 // Configuración de vencimientos
-const configMeses = ref({ optimo: 24, seguro: 12, alerta: 6, critico: 0 })
+const configMeses = ref({
+  optimo: 24,   // >24 meses
+  seguro: 12,   // 12–24
+  alerta: 6,    // 6–12
+  riesgo: 2,    // 2–6
+  critico: 0,   // 0–2
+  vencido: -1   // <0
+})
 const hoy = new Date()
 
 // ================================
@@ -47,49 +54,84 @@ const todosLotes = computed<any[]>(() =>
 // ================================
 const distribucionPorcentual = computed(() => {
   const total = todosLotes.value.length
-  if (!total) return { critico: 0, alerta: 0, seguro: 0, optimo: 0 }
+  if (!total) return { vencido: 0, critico: 0, riesgo: 0, alerta: 0, seguro: 0, optimo: 0 }
 
   const c = configMeses.value
-  const categorias = { critico: 0, alerta: 0, seguro: 0, optimo: 0 }
+  const categorias = { vencido: 0, critico: 0, riesgo: 0, alerta: 0, seguro: 0, optimo: 0 }
 
   todosLotes.value.forEach((l: any) => {
     const fechaVto = new Date(l.vencimiento)
     const diffMeses = (fechaVto.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24 * 30)
 
-    if (diffMeses <= c.critico) categorias.critico++
-    else if (diffMeses <= c.alerta) categorias.alerta++
-    else if (diffMeses <= c.seguro) categorias.seguro++
-    else categorias.optimo++
+    let categoria = ''
+    if (diffMeses < 0) {
+      categoria = 'Vencido'
+      categorias.vencido++
+    } else if (diffMeses <= 2) {
+      categoria = 'Crítico'
+      categorias.critico++
+    } else if (diffMeses <= 6) {
+      categoria = 'Riesgo'
+      categorias.riesgo++
+    } else if (diffMeses <= 12) {
+      categoria = 'Alerta'
+      categorias.alerta++
+    } else if (diffMeses <= 24) {
+      categoria = 'Seguro'
+      categorias.seguro++
+    } else {
+      categoria = 'Óptimo'
+      categorias.optimo++
+    }
   })
 
   return {
+    vencido: (categorias.vencido / total) * 100,
     critico: (categorias.critico / total) * 100,
-    alerta: (categorias.alerta / total) * 100,
-    seguro: (categorias.seguro / total) * 100,
-    optimo: (categorias.optimo / total) * 100,
+    riesgo:  (categorias.riesgo  / total) * 100,
+    alerta:  (categorias.alerta  / total) * 100,
+    seguro:  (categorias.seguro  / total) * 100,
+    optimo:  (categorias.optimo  / total) * 100,
   }
 })
 
 const chartSeries = computed(() => [
+  distribucionPorcentual.value.vencido,
   distribucionPorcentual.value.critico,
+  distribucionPorcentual.value.riesgo,
   distribucionPorcentual.value.alerta,
   distribucionPorcentual.value.seguro,
   distribucionPorcentual.value.optimo,
 ])
 
 const COLORS = {
-  optimo: 'rgb(34,197,94)',
-  seguro: 'rgb(59,130,246)',
-  alerta: 'rgb(234,179,8)',
-  critico: 'rgb(239,68,68)',
+  vencido: '#9333ea', // morado
+  critico: '#ef4444', // rojo
+  riesgo:  '#f97316', // naranjo
+  alerta:  '#facc15', // amarillo
+  seguro:  '#16a34a', // verde
+  optimo:  '#3b82f6', // azul
 }
+
 const chartOptions = computed(() => ({
   chart: { type: 'donut' },
-  labels: ['Crítico', 'Alerta', 'Seguro', 'Óptimo'],
-  colors: [COLORS.critico, COLORS.alerta, COLORS.seguro, COLORS.optimo],
+  labels: ['Vencido', 'Crítico', 'Riesgo', 'Alerta', 'Seguro', 'Óptimo'],
+  colors: [
+    COLORS.vencido,
+    COLORS.critico,
+    COLORS.riesgo,
+    COLORS.alerta,
+    COLORS.seguro,
+    COLORS.optimo,
+  ],
   legend: { position: 'bottom' },
   dataLabels: {
     formatter: (val: number) => `${val.toFixed(1)}%`,
+  },
+  tooltip: {
+    y: {
+      formatter: (val: number) => `${val.toFixed(1)}%`,
+    },
   },
 }))
 
@@ -332,20 +374,18 @@ const proximosVencidos = computed<any[]>(() => {
 
       </div>
       <div class="bg-white shadow rounded-xl p-6">
-        <h2
-          class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2"
-        >
+        <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
           <Icon icon="mdi:chart-pie" class="text-indigo-600 text-2xl" />
           Distribución porcentual de lotes
         </h2>
 
-        <p class="text-sm text-gray-600 mb-6">
-          Muestra qué porcentaje del total de lotes cae en cada rango de
-          vencimiento:
-          <span class="font-medium text-red-600">Crítico</span>,
-          <span class="font-medium text-yellow-600">Alerta</span>,
-          <span class="font-medium text-blue-600">Seguro</span> o
-          <span class="font-medium text-green-600">Óptimo</span>.
+        <p class="text-sm text-gray-600 mb-2">
+          Muestra qué porcentaje del total de lotes cae en cada rango de vencimiento.
+        </p>
+
+        <!-- 🔹 Aquí mostramos el total -->
+        <p class="text-lg font-semibold text-black-700 text-center mb-6">
+          Cantidades totales analizadas: {{ totalLotes.toLocaleString() }}
         </p>
 
         <client-only>

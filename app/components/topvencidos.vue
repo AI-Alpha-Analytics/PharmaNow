@@ -117,7 +117,7 @@ const ranking = computed(() => {
               </div>
               <ul class="list-disc pl-4 space-y-0.5 max-h-48 overflow-auto">
                 <li v-for="d in item.detalle" :key="d.id">
-                  Lote {{ d.id }}:
+                  Lote {{  }}:
                   <strong>{{ fmt(d.cantidad) }}</strong>
                   <span class="text-gray-500"> (vence {{ d.vencimiento }})</span>
                 </li>

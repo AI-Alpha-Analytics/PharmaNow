@@ -15,7 +15,31 @@ const {
 
 // REST para crear
 const { addProducto,addTanda, productos } = useInventario()
+const COLORS = {
+  vencido: '#9333ea', // morado
+  critico: '#ef4444', // rojo
+  riesgo:  '#f97316', // naranjo
+  alerta:  '#facc15', // amarillo
+  seguro:  '#16a34a', // verde
+  optimo:  '#3b82f6', // azul
+}
 
+const RANGOS = computed(() => {
+  const mCrit   = daysToMonths(config.critico ?? 0)
+  const mRiesgo = daysToMonths(config.riesgo ?? 0)
+  const mAlert  = daysToMonths(config.alerta ?? 0)
+  const mSeg    = daysToMonths(config.seguro ?? 0)
+  const mOpt    = daysToMonths(config.optimo ?? 0)
+
+  return [
+    { key: 'vencido', color: COLORS.vencido, label: 'Vencido', rango: '≤0d', check: (d) => d < 0 },
+    { key: 'critico', color: COLORS.critico, label: 'Crítico', rango: `≤${mCrit}m`, check: (d) => d >= 0 && d <= config.critico },
+    { key: 'riesgo',  color: COLORS.riesgo,  label: 'Riesgo',  rango: `${mCrit}–${mRiesgo}m`, check: (d) => d > config.critico && d <= config.riesgo },
+    { key: 'alerta',  color: COLORS.alerta,  label: 'Alerta',  rango: `${mRiesgo}–${mAlert}m`, check: (d) => d > config.riesgo && d <= config.alerta },
+    { key: 'seguro',  color: COLORS.seguro,  label: 'Seguro',  rango: `${mAlert}–${mSeg}m`, check: (d) => d > config.alerta && d <= config.seguro },
+    { key: 'optimo',  color: COLORS.optimo,  label: 'Óptimo',  rango: `>${mSeg}m`, check: (d) => d > config.seguro },
+  ]
+})
 
 const search = ref('')
 const sortBy = ref('nombre')
@@ -94,12 +118,12 @@ const daysUntil = (isoDate) => {
 
 const config = reactive({
   vencido: -1,
-  critico: 0,
-  alerta: 6 * 30,
-  seguro: 12 * 30,
-  optimo: 24 * 30,
+  critico: 2 * 30,   // 2 meses = 60 días
+  riesgo:  6 * 30,   // 6 meses = 180 días
+  alerta: 12 * 30,   // 12 meses = 360 días
+  seguro: 24 * 30,   // 24 meses = 720 días
+  optimo: 36 * 30,   // ejemplo: >36 meses
 })
-
 onMounted(async () => {
   const saved = localStorage.getItem('inventarioConfig')
   if (saved) {
@@ -142,45 +166,30 @@ onMounted(async () => {
 })
 
 
-const legend = computed(() => {
-  const mCrit = daysToMonths(config.critico ?? 0)
-  const mAlert = daysToMonths(config.alerta ?? 0)
-  const mSeg = daysToMonths(config.seguro ?? 0)
-
-  return [
-    { key: 'vencido', color: '#dc2626', text: 'Vencido: < 0 días' }, 
-    { key: 'critico', color: '#fb923c', text: `Crítico: ≤ ${mCrit} días` }, 
-    { key: 'alerta', color: '#facc15', text: `Alerta: ${mCrit}–${mAlert} días` }, 
-    { key: 'seguro', color: '#16a34a', text: `Seguro: ${mAlert}–${mSeg} meses` }, 
-    { key: 'optimo', color: '#3b82f6', text: `Óptimo: > ${mSeg} meses` }, 
-  ]
-})
+const legend = computed(() =>
+  RANGOS.value.map(r => ({
+    key: r.key,
+    color: r.color,
+    text: `${r.label}: ${r.rango}`
+  }))
+)
 
 const getColorByDiff = (diffDays) => {
-  if (diffDays < 0) return '#dc2626'
-  if (diffDays <= config.critico) return '#fb923c'
-  if (diffDays <= config.alerta) return '#facc15' 
-  if (diffDays <= config.seguro) return '#16a34a'
-  return '#3b82f6'
+  const rango = RANGOS.value.find(r => r.check(diffDays))
+  return rango ? rango.color : '#999'
 }
 
 const getSituacionTexto = (med) => {
-  const counts = { vencido: 0, critico: 0, alerta: 0, seguro: 0, optimo: 0 }
+  const counts = Object.fromEntries(RANGOS.value.map(r => [r.key, 0]))
 
   med.lotes.forEach((lote) => {
-    const diffDays = daysUntil(lote.vencimiento)
-    if (diffDays < 0) counts.vencido++
-    else if (diffDays <= config.critico) counts.critico++
-    else if (diffDays <= config.alerta) counts.alerta++
-    else if (diffDays <= config.seguro) counts.seguro++
-    else counts.optimo++
+    const diff = daysUntil(lote.vencimiento)
+    const rango = RANGOS.value.find(r => r.check(diff))
+    if (rango) counts[rango.key]++
   })
 
-  if (counts.vencido) return `${counts.vencido} lotes Vencidos`
-  if (counts.critico) return `${counts.critico} lotes Críticos`
-  if (counts.alerta) return `${counts.alerta} lotes en Alerta`
-  if (counts.seguro) return `${counts.seguro} lotes Seguros`
-  return `${counts.optimo} lotes Óptimos`
+  const found = RANGOS.value.find(r => counts[r.key] > 0)
+  return found ? `${counts[found.key]} lotes ${found.label}` : 'Sin lotes'
 }
 
 const expanded = ref([])
@@ -287,7 +296,7 @@ const guardarMedicamento = async (payload) => {
         <template v-for="item in legend" :key="item.key">
           <span
             class="inline-flex items-center gap-2 text-sm px-3 py-1 rounded-full"
-            :style="{ backgroundColor: item.color + '22', color: item.color }"
+            :style="{ backgroundColor: item.color + '22',}"
           >
             <span
               class="w-2 h-2 rounded-full"

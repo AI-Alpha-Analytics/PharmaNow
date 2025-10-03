@@ -26,12 +26,21 @@ const estadoTexto = computed(() => {
   if (diffDays.value === 0) return 'Vence hoy'
   return `${diffDays.value} días restantes`
 })
-
+const COLORS = {
+  vencido: '#9333ea', // morado
+  critico: '#ef4444', // rojo
+  riesgo:  '#f97316', // naranjo
+  alerta:  '#facc15', // amarillo
+  seguro:  '#16a34a', // verde
+  optimo:  '#3b82f6', // azul
+}
 const getColor = (days) => {
-  if (days <= props.config.critico) return 'rgb(239,68,68)'
-  if (days <= props.config.alerta) return 'rgb(234,179,8)'
-  if (days <= props.config.seguro) return 'rgb(59,130,246)'
-  return 'rgb(34,197,94)'
+  if (days < 0) return COLORS.vencido        // morado
+  if (days <= props.config.critico) return COLORS.critico  // rojo
+  if (days <= props.config.riesgo) return COLORS.riesgo    // naranjo
+  if (days <= props.config.alerta) return COLORS.alerta    // amarillo
+  if (days <= props.config.seguro) return COLORS.seguro    // verde
+  return COLORS.optimo                                     // azul
 }
 
 const barStyle = computed(() => {
@@ -55,7 +64,6 @@ const inconsistencia = computed(() => props.lote.cantidad > props.total)
           class="text-xs px-2 py-1 rounded-full flex items-center gap-1"
           :style="{
             backgroundColor: getColor(diffDays) + '22',
-            color: getColor(diffDays),
           }"
         >
           <Icon icon="mdi:calendar-clock" class="text-sm" />
