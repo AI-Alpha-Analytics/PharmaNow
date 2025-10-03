@@ -1,32 +1,58 @@
-// app/plugins/socket.client.js
 import { io } from 'socket.io-client'
+import { watch } from 'vue'
+import { useAuthStore } from '~/stores/auth'
 
-export default defineNuxtPlugin(() => {
+const sanitizeToken = (value) => {
+  if (!value) return null
+  if (value === 'null' || value === 'undefined') return null
+  return value
+}
+
+export default defineNuxtPlugin((nuxtApp) => {
+  if (!process.client) {
+    return
+  }
+
   const config = useRuntimeConfig()
-  // 👇 aquí recuperamos el token guardado en cookie (si existe)
-  const token = process.client ? useCookie('token').value : null
+  const auth = useAuthStore(nuxtApp.$pinia)
+  const tokenCookie = useCookie('token')
 
   const socket = io(`${config.public.apiWsUrl}/inventario`, {
     transports: ['websocket'],
     autoConnect: false,
-    auth: { token },
   })
 
+  const syncSocket = () => {
+    const token = sanitizeToken(auth.token) ?? sanitizeToken(tokenCookie.value)
+    socket.auth = token ? { token } : {}
+
+    if (token) {
+      if (!socket.connected) {
+        socket.connect()
+      }
+    } else if (socket.connected) {
+      socket.disconnect()
+    }
+  }
+
+  watch(
+    () => [auth.token, tokenCookie.value],
+    syncSocket,
+    { immediate: true }
+  )
+
   socket.on('connect', () => {
-    console.log('✅ Conectado al socket con id:', socket.id)
+    console.log('Socket conectado con id:', socket.id)
   })
 
   socket.on('disconnect', (reason) => {
-    console.warn('⚠️ Socket desconectado:', reason)
+    console.warn('Socket desconectado:', reason)
   })
 
   socket.on('connect_error', (err) => {
-    console.error('❌ Error de conexión:', err.message)
+    console.error('Error de conexion:', err.message)
   })
 
-  return {
-    provide: {
-      socketInventario: socket,
-    },
-  }
+  nuxtApp.provide('socketInventario', socket)
 })
+

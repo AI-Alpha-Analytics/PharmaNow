@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { useCookie } from '#app'
 
+const sanitizeCookieValue = (value) => {
+  if (!value) return null
+  if (value === 'null' || value === 'undefined') return null
+  return value
+}
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null,
@@ -26,17 +32,8 @@ export const useAuthStore = defineStore('auth', {
 
       if (import.meta.client) {
         const { $socketInventario } = useNuxtApp()
-
-        if ($socketInventario) {
-          $socketInventario.io.opts.auth = { token: response.token }
-
-          if ($socketInventario.connected) {
-            $socketInventario.disconnect()
-          }
-
+        if ($socketInventario && !$socketInventario.connected) {
           $socketInventario.connect()
-        } else {
-          console.warn('⚠️ Socket no inicializado aún en login')
         }
       }
 
@@ -47,49 +44,19 @@ export const useAuthStore = defineStore('auth', {
       const tokenCookie = useCookie('token')
       const userCookie = useCookie('user')
 
-      if (
-        tokenCookie.value &&
-        tokenCookie.value !== 'null' &&
-        tokenCookie.value !== 'undefined'
-      ) {
-        this.token = tokenCookie.value
-      } else {
-        this.token = null
-      }
+      const token = sanitizeCookieValue(tokenCookie.value)
+      const user = sanitizeCookieValue(userCookie.value)
 
-      if (
-        userCookie.value &&
-        userCookie.value !== 'null' &&
-        userCookie.value !== 'undefined'
-      ) {
-        this.user = userCookie.value
-      } else {
-        this.user = null
-      }
-
-      if (userCookie.value) this.user = userCookie.value
-
-      if (this.token && import.meta.client) {
-        const nuxtApp = useNuxtApp()
-
-        if (nuxtApp.$socketInventario) {
-          nuxtApp.$socketInventario.io.opts.auth = { token: this.token }
-
-          if (!nuxtApp.$socketInventario.connected) {
-            nuxtApp.$socketInventario.connect()
-          }
-        } else {
-          console.warn('⚠️ Socket aún no está inicializado en loadFromCookie')
-        }
-      }
+      this.token = token
+      this.user = user
     },
 
     logout() {
       this.user = null
       this.token = null
 
-      useCookie('token', { sameSite: 'strict' }).value = undefined
-      useCookie('user', { sameSite: 'strict' }).value = undefined
+      useCookie('token').value = null
+      useCookie('user').value = null
 
       if (import.meta.client) {
         const { $socketInventario } = useNuxtApp()
@@ -100,3 +67,4 @@ export const useAuthStore = defineStore('auth', {
     },
   },
 })
+
