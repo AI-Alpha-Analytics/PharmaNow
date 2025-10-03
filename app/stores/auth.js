@@ -47,7 +47,26 @@ export const useAuthStore = defineStore('auth', {
       const tokenCookie = useCookie('token')
       const userCookie = useCookie('user')
 
-      if (tokenCookie.value) this.token = tokenCookie.value
+      if (
+        tokenCookie.value &&
+        tokenCookie.value !== 'null' &&
+        tokenCookie.value !== 'undefined'
+      ) {
+        this.token = tokenCookie.value
+      } else {
+        this.token = null
+      }
+
+      if (
+        userCookie.value &&
+        userCookie.value !== 'null' &&
+        userCookie.value !== 'undefined'
+      ) {
+        this.user = userCookie.value
+      } else {
+        this.user = null
+      }
+
       if (userCookie.value) this.user = userCookie.value
 
       if (this.token && import.meta.client) {
@@ -68,8 +87,9 @@ export const useAuthStore = defineStore('auth', {
     logout() {
       this.user = null
       this.token = null
-      useCookie('token').value = null
-      useCookie('user').value = null
+
+      useCookie('token', { sameSite: 'strict' }).value = undefined
+      useCookie('user', { sameSite: 'strict' }).value = undefined
 
       if (import.meta.client) {
         const { $socketInventario } = useNuxtApp()

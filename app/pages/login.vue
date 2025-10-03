@@ -92,7 +92,7 @@ const submit = async () => {
   loading.value = true
   try {
     const response = await auth.login(email.value, password.value)
-    await router.push('/')
+    await router.push('/home')
   } catch (err) {
     console.error('❌ Error en login:', err)
     alert('Credenciales inválidas')
