@@ -28,10 +28,13 @@ const bodegaEditando = ref(null)
 const containerRef = ref(null)
 const stageRef = ref(null)
 const ubicacionEditando = ref(null)
-const modoVista = ref('2D') // o '3D'
 const modoEdicion = ref(false)
 const mostrarAvisoBloqueo = ref(false)
-
+const modoVista = ref('2D')
+const modoVista3D = computed({
+  get: () => modoVista.value === '3D',
+  set: (val) => (modoVista.value = val ? '3D' : '2D'),
+})
 // ==========================
 // 🔹 Inicialización
 // ==========================
@@ -420,16 +423,6 @@ const darkenColor = (hex, factor = 0.25) => {
               <Icon icon="mdi:warehouse" class="w-5 h-5 text-indigo-600" />
               {{ b.nombre }}
             </h3>
-            <button
-              @click="modoVista = modoVista === '2D' ? '3D' : '2D'"
-              class="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md shadow hover:bg-indigo-700 transition"
-            >
-              <Icon
-                :icon="modoVista === '2D' ? 'mdi:cube' : 'mdi:vector-square'"
-                class="w-4 h-4"
-              />
-              {{ modoVista === '2D' ? 'Vista 3D' : 'Vista 2D' }}
-            </button>
 
             <button
               @click.stop="editarBodega(b)"
@@ -644,6 +637,9 @@ const darkenColor = (hex, factor = 0.25) => {
                   Edición desactivada — presiona “Editar ubicaciones” para modificar
                 </div>
               </v-stage>
+
+              
+
               <!-- ⚙️ Botones de edición manual de cada sección -->
               <div
                 v-for="ubic in ubicacionesActivas"
@@ -674,9 +670,40 @@ const darkenColor = (hex, factor = 0.25) => {
             />
           </ClientOnly>
         </div>
+          <div
+            class="absolute bottom-4 right-4 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-lg px-5 py-2.5 rounded-full shadow-md border border-gray-200"
+          >
+            <span
+              class="text-xs font-semibold"
+              :class="modoVista === '2D' ? 'text-indigo-700' : 'text-gray-400'"
+            >
+              Vista 2D
+            </span>
+
+            <label class="relative inline-flex items-center cursor-pointer select-none">
+              <input type="checkbox" v-model="modoVista3D" class="sr-only" />
+              <div
+                class="w-12 h-6 rounded-full transition-all duration-300 relative"
+                :class="modoVista3D ? 'bg-indigo-600' : 'bg-gray-300'"
+              >
+                <div
+                  class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-all duration-300"
+                  :class="modoVista3D ? 'translate-x-6' : 'translate-x-0'"
+                ></div>
+              </div>
+            </label>
+
+            <span
+              class="text-xs font-semibold"
+              :class="modoVista === '3D' ? 'text-indigo-700' : 'text-gray-400'"
+            >
+              Vista 3D
+            </span>
+          </div>
+
 
       </div>
-
+      
       <!-- 🔹 Modal de creación -->
       <AddBodega
         v-if="mostrarModalBodega"
@@ -693,7 +720,7 @@ const darkenColor = (hex, factor = 0.25) => {
     </div>
   </div>
 </template>
-<style scoped>
+<style>
 .absolute button {
   pointer-events: all;
 }
