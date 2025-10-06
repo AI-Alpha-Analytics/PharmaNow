@@ -85,3 +85,9 @@ export const getInfoCharts = async (params) => {
     params,
   })
 }
+// ✅ Medicamentos por ubicación
+export const getMedicamentosByUbicacion = async (idUbicacion) => {
+  return await useApi()(`/inventario/ubicaciones/${idUbicacion}/medicamentos`, {
+    method: 'GET',
+  })
+}

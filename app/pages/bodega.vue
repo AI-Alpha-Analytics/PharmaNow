@@ -1,421 +1,314 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
+import AddBodega from '~/components/addBodega.vue'
+import { useInventarioSocket } from '~/composables/useInventarioSocket'
+import {
+  createUbicacion,
+  updateUbicacion,
+  deleteUbicacion,
+  deleteBodega,
+} from '~/services/inventarioService'
 import DetalleSeccion from '~/components/detalleSeccion.vue'
+
+// ==========================
+// 🔹 Estado general
+// ==========================
+const bodegas = ref([])
 const bodegaActiva = ref(null)
+const ubicacionesActivas = ref([])
+const mostrarModalBodega = ref(false)
 const dibujando = ref(false)
 const previewPunto = ref(null)
 const modoDibujo = ref('polygon')
-const inicioRect = ref(null)
-
+const mostrarDetalle = ref(false)
+const ubicacionSeleccionada = ref(null)
+const bodegaEditando = ref(null)
+// Referencias a Konva
 const containerRef = ref(null)
 const stageRef = ref(null)
+const ubicacionEditando = ref(null)
+// ==========================
+// 🔹 Inicialización
+// ==========================
+const { fetchBodegas, fetchUbicacionesByBodega } = useInventarioSocket()
 
-let resizeObserver = null
+onMounted(async () => {
+  try {
+    bodegas.value = await fetchBodegas()
+    if (bodegas.value.length) await seleccionarBodega(bodegas.value[0])
 
-const seccionEditando = ref(null)
-const detalleSeccion = ref(null)
-const seccionDemo = ref({
-  id: 101,
-  nombre: 'Estante A - Sección 1',
-  x: 120,
-  y: 80,
-  width: 300,
-  height: 150,
-  medicamentos: [
-    {
-      id: 1,
-      nombre: 'Paracetamol 500mg',
-      lote: 'L-001',
-      vencimiento: '2025-08-10',
-      cantidad: 120,
-    },
-    {
-      id: 2,
-      nombre: 'Ibuprofeno 400mg',
-      lote: 'L-045',
-      vencimiento: '2024-12-01',
-      cantidad: 80,
-    },
-    {
-      id: 3,
-      nombre: 'Amoxicilina 875mg',
-      lote: 'L-023',
-      vencimiento: '2026-03-15',
-      cantidad: 50,
-    },
-  ],
-  subniveles: [
-    {
-      id: 'sub-1',
-      nombre: 'Nivel Superior',
-      medicamentos: [
-        { id: 4, nombre: 'Paracetamol 500mg', lote: 'L-001', cantidad: 60 },
-        { id: 5, nombre: 'Amoxicilina 875mg', lote: 'L-023', cantidad: 30 },
-      ],
-    },
-    {
-      id: 'sub-2',
-      nombre: 'Nivel Medio',
-      medicamentos: [
-        { id: 6, nombre: 'Ibuprofeno 400mg', lote: 'L-045', cantidad: 80 },
-      ],
-    },
-    {
-      id: 'sub-3',
-      nombre: 'Nivel Inferior',
-      medicamentos: [],
-    },
-  ],
+    const stage = stageRef.value?.getNode?.()
+    const tr = transformerRef.value?.getNode?.()
+
+    if (stage && tr) {
+      stage.on('click tap', (e) => {
+        if (e.target === stage) {
+          // 🔹 Limpia selección y desactiva transformaciones
+          tr.nodes([])
+
+          stage.find('.ubicacionRect').forEach((n) => {
+            const node = n.getNode ? n.getNode() : n
+            if (node && node.transformEnabled) node.transformEnabled(false)
+          })
+
+          stage.batchDraw()
+          console.log('❎ Selección limpiada')
+        }
+      })
+      console.log('🎯 Transformer listo para interacción visual')
+    }
+  } catch (err) {
+    console.error('❌ Error inicializando bodegas o transformer:', err)
+  }
 })
 
-const ubicacionesActivas = ref([])
-const ubicacionesPorBodega = ref({})
-const detalleUbicacion = ref(null)
 
-const construirNombreUbicacion = (ubicacion, index) => {
-  return (
-    ubicacion?.descripcion ||
-    ubicacion?.nombre ||
-    ubicacion?.codigo ||
-    ubicacion?.alias ||
-    `Ubicacion ${index + 1}`
-  )
-}
+const layerRef = ref(null)
 
-const generarCoordenadasSimuladas = (total, index) => {
-  const cantidad = total || 1
-  const columnas = Math.max(1, Math.ceil(Math.sqrt(cantidad)))
-  const separacionX = 150
-  const separacionY = 120
-  const margenX = 80
-  const margenY = 80
-  const columna = index % columnas
-  const fila = Math.floor(index / columnas)
-  return {
-    x: margenX + columna * separacionX,
-    y: margenY + fila * separacionY,
-  }
-}
-
-const generarCoordenadasEnBodega = (bodega, index, total) => {
-  const puntos = Array.isArray(bodega?.puntos) ? bodega.puntos : []
-
-  if (!puntos.length) {
-    // fallback a coordenadas simuladas si no hay puntos definidos
-    return generarCoordenadasSimuladas(total, index)
-  }
-
-  const xs = puntos.filter((_, i) => i % 2 === 0)
-  const ys = puntos.filter((_, i) => i % 2 === 1)
-
-  const minX = Math.min(...xs)
-  const maxX = Math.max(...xs)
-  const minY = Math.min(...ys)
-  const maxY = Math.max(...ys)
-
-  const cols = Math.ceil(Math.sqrt(total))
-  const rows = Math.ceil(total / cols)
-
-  const cellW = (maxX - minX) / cols
-  const cellH = (maxY - minY) / rows
-
-  const col = index % cols
-  const row = Math.floor(index / cols)
-
-  return {
-    x: minX + col * cellW + cellW / 2,
-    y: minY + row * cellH + cellH / 2,
-  }
-}
-
-
-const decorarUbicaciones = (lista = [], bodega) => {
-  const total = lista.length || 1
-  return lista.map((ubicacion, index) => {
-    const coords = generarCoordenadasEnBodega(bodega, index, total)
-    const nombre = construirNombreUbicacion(ubicacion, index)
-    return {
-      ...ubicacion,
-      nombre,
-      x: ubicacion?.x ?? ubicacion?.posX ?? coords.x,
-      y: ubicacion?.y ?? ubicacion?.posY ?? coords.y,
-      _key: ubicacion?.id ?? `${nombre}-${index}`,
-      simulatedPosition: ubicacion?.x == null && ubicacion?.posX == null,
-    }
-  })
-}
-
-
-const eliminarUbicacion = (ubicacion) => {
-  if (!ubicacion) return
-  ubicacionesActivas.value = ubicacionesActivas.value.filter(
-    (u) => u._key !== ubicacion._key
-  )
-  if (detalleUbicacion.value?._key === ubicacion._key) {
-    detalleUbicacion.value = null
-  }
-  const idActual = bodegaActiva.value?.id
-  if (idActual != null) {
-    const copia = { ...ubicacionesPorBodega.value }
-    if (copia[idActual]) {
-      copia[idActual] = copia[idActual].filter(
-        (u) => u._key !== ubicacion._key
-      )
-    }
-    ubicacionesPorBodega.value = copia
-  }
-}
-
-const abrirUbicacion = (ubic) => {
-  if (!ubic) return
-  detalleUbicacion.value = ubic
-}
-
-const cerrarDetalleUbicacion = () => {
-  detalleUbicacion.value = null
-}
-
-const editarSeccion = (sec) => {
-  seccionEditando.value = sec
-}
-
-const abrirDetalle = (sec) => {
-  detalleSeccion.value = sec
-}
-
-
-const onTransformEnd = (sec, e) => {
-  const node = e.target
-  sec.width = node.width() * node.scaleX()
-  sec.height = node.height() * node.scaleY()
-
-  node.scaleX(1)
-  node.scaleY(1)
-
-  guardar()
-}
+// ==========================
+// 🔹 Lógica de bodegas
+// ==========================
 const seleccionarBodega = async (bodega) => {
-  if (!bodega) return
   bodegaActiva.value = bodega
-  dibujando.value = false
   previewPunto.value = null
-  detalleUbicacion.value = null
+  dibujando.value = false
 
   try {
     const ubicaciones = await fetchUbicacionesByBodega(bodega.id)
-    const decoradas = decorarUbicaciones(ubicaciones || [], bodega)
-    ubicacionesPorBodega.value = {
-      ...ubicacionesPorBodega.value,
-      [bodega.id]: decoradas,
-    }
-    ubicacionesActivas.value = decoradas
+    ubicacionesActivas.value = ubicaciones.map((u) => ({
+      ...u,
+      _key: u.id || crypto.randomUUID(),
+    }))
   } catch (err) {
-    console.error('Error al obtener ubicaciones:', err)
-    ubicacionesActivas.value = ubicacionesPorBodega.value[bodega.id] || []
+    console.error('❌ Error al obtener ubicaciones:', err)
+    ubicacionesActivas.value = []
   }
 }
-
-
-const crearBodega = () => {
-  const nueva = {
-    id: Date.now(),
-    nombre: `Bodega ${bodegas.value.length + 1}`,
-    puntos: [],
-    secciones: [],
-    cerrado: false,
-  }
-  bodegas.value.push(nueva)
-  bodegaActiva.value = nueva
-  ubicacionesActivas.value = []
-  detalleUbicacion.value = null
-  ubicacionesPorBodega.value = {
-    ...ubicacionesPorBodega.value,
-    [nueva.id]: [],
-  }
-  dibujando.value = true
-  guardar()
-}
-
 
 const borrarBodega = async (id) => {
-  bodegas.value = bodegas.value.filter((b) => b.id !== id)
-  const copia = { ...ubicacionesPorBodega.value }
-  delete copia[id]
-  ubicacionesPorBodega.value = copia
-  if (bodegaActiva.value?.id === id) {
-    if (bodegas.value.length > 0) {
-      await seleccionarBodega(bodegas.value[0])
-    } else {
-      bodegaActiva.value = null
-      ubicacionesActivas.value = []
-      detalleUbicacion.value = null
-    }
-  }
-  guardar()
-}
-
-const agregarPunto = (e) => {
-  if (!dibujando.value || !bodegaActiva.value) return
-  const pos = e.target.getStage().getPointerPosition()
-
-  if (modoDibujo.value === 'polygon') {
-    intentarCerrar(e)
-    if (!dibujando.value) return
-    bodegaActiva.value.puntos.push(pos.x, pos.y)
-  }
-
-  if (modoDibujo.value === 'rect') {
-    if (!inicioRect.value) {
-      inicioRect.value = pos
-    } else {
-      const { x, y } = inicioRect.value
-      const ancho = pos.x - x
-      const alto = pos.y - y
-      bodegaActiva.value.puntos = [
-        x,
-        y,
-        x + ancho,
-        y,
-        x + ancho,
-        y + alto,
-        x,
-        y + alto,
-      ]
-      bodegaActiva.value.cerrado = true
-      dibujando.value = false
-      inicioRect.value = null
-    }
-  }
-
-  guardar()
-}
-
-const moverMouse = (e) => {
-  if (!dibujando.value || !bodegaActiva.value) return
-  const pos = e.target.getStage().getPointerPosition()
-  previewPunto.value = pos
-}
-
-const cerrarPoligono = () => {
-  if (!dibujando.value || !bodegaActiva.value) return
-  bodegaActiva.value.cerrado = true
-  dibujando.value = false
-  guardar()
-}
-
-const intentarCerrar = (e) => {
-  if (!dibujando.value || !bodegaActiva.value) return
-  if (bodegaActiva.value.puntos.length < 3) return
-  const pos = e.target.getStage().getPointerPosition()
-  const [x0, y0] = bodegaActiva.value.puntos
-  const dx = pos.x - x0
-  const dy = pos.y - y0
-  const dist = Math.sqrt(dx * dx + dy * dy)
-  if (dist < 15) {
-    bodegaActiva.value.cerrado = true
-    dibujando.value = false
-    previewPunto.value = null
-    guardar()
-  }
-}
-
-const agregarSeccion = () => {
-  if (!bodegaActiva.value) return
-  const nuevaSeccion = {
-    id: Date.now(),
-    nombre: `Sección ${String.fromCharCode(
-      65 + bodegaActiva.value.secciones.length
-    )}`,
-    x: 100,
-    y: 100,
-    width: 100,
-    height: 80,
-  }
-  bodegaActiva.value.secciones.push(nuevaSeccion)
-  guardar()
-}
-
-const moverSeccion = (sec, e) => {
-  const pos = e.target.position()
-  sec.x = pos.x
-  sec.y = pos.y
-  guardar()
-}
-
-const borrarSeccion = (sec) => {
-  if (!bodegaActiva.value) return
-  bodegaActiva.value.secciones = bodegaActiva.value.secciones.filter(
-    (s) => s.id !== sec.id
-  )
-  guardar()
-}
-
-const guardar = () => {
-  localStorage.setItem('bodegas', JSON.stringify(bodegas.value))
-}
-const { fetchBodegas, bodegas, fetchUbicacionesByBodega } = useInventarioSocket()
-
-onMounted(async () => {
-  // 1) Primero intentamos cargar desde API
   try {
-    bodegas.value = await fetchBodegas()
-    if (bodegas.value.length > 0) {
-      await seleccionarBodega(bodegas.value[0])
-    }
-    console.log('Bodegas cargadas desde API:', bodegas.value)
+    await deleteBodega(id)
+    bodegas.value = bodegas.value.filter((b) => b.id !== id)
+    if (bodegaActiva.value?.id === id) bodegaActiva.value = null
+    console.log(`🗑️ Bodega ${id} eliminada correctamente`)
   } catch (err) {
-    console.error('Error cargando bodegas desde API:', err)
-    // fallback a localStorage si falla
-    const raw = localStorage.getItem('bodegas')
-    if (raw) {
-      bodegas.value = JSON.parse(raw).map((b) => ({
-        ...b,
-        puntos: b.puntos || [],
-        secciones: b.secciones || [],
-        cerrado: b.cerrado || false,
-      }))
-      if (bodegas.value.length > 0) {
-        bodegaActiva.value = bodegas.value[0]
-        const cache = ubicacionesPorBodega.value[bodegaActiva.value.id] || []
-        ubicacionesActivas.value = cache
-      }
-    }
+    console.error('❌ Error al eliminar bodega:', err)
+  }
+}
+const editarBodega = (bodega) => {
+  bodegaEditando.value = bodega
+  mostrarModalBodega.value = true
+  console.log('✏️ Editando bodega:', bodega.nombre)
+}
+
+
+// ==========================
+// 🔹 Lógica de ubicaciones
+// ==========================
+const agregarSeccion = async () => {
+  if (!bodegaActiva.value) {
+    alert('Selecciona una bodega antes de agregar secciones.')
+    return
+  }
+  const nuevaUbicacion = {
+    descripcion: `Sección ${ubicacionesActivas.value.length + 1}`,
+    idBodega: bodegaActiva.value.id,
+    x: 100 + ubicacionesActivas.value.length * 25,
+    y: 100 + ubicacionesActivas.value.length * 20,
+    width: 120,
+    height: 80,
+    color: '#f97316',
   }
 
-  // 2) ResizeObserver para el canvas
-  resizeObserver = new ResizeObserver((entries) => {
-    for (const entry of entries) {
-      if (stageRef.value?.getStage) {
-        const stage = stageRef.value.getStage()
-        stage.width(entry.contentRect.width)
-        stage.height(entry.contentRect.height)
-        stage.draw()
-      }
-    }
+  try {
+    const res = await createUbicacion(nuevaUbicacion)
+    ubicacionesActivas.value.push({
+      ...res,
+      _key: res.id || crypto.randomUUID(),
+    })
+    console.log('✅ Sección creada:', res)
+  } catch (err) {
+    console.error('❌ Error al crear ubicación:', err)
+  }
+}
+
+const onUbicacionDragEnd = async (ubic, e) => {
+  const pos = e.target.position()
+  ubic.x = pos.x
+  ubic.y = pos.y
+  try {
+    await updateUbicacion(ubic.id, { x: ubic.x, y: ubic.y })
+    console.log(`✅ Ubicación ${ubic.descripcion} actualizada`, ubic)
+  } catch (err) {
+    console.error('❌ Error al actualizar ubicación:', err)
+  }
+}
+
+const abrirDetalle = (ubic) => {
+  ubicacionSeleccionada.value = ubic
+  mostrarDetalle.value = true
+  console.log('📦 Abriendo detalle de ubicación:', ubic.descripcion)
+}
+
+const editarUbicacion = (ubic) => {
+  ubicacionEditando.value = { ...ubic }
+  console.log('✏️ Editando ubicación:', ubic.descripcion)
+}
+
+const transformerRef = ref(null)
+const selectedNode = ref(null)
+
+const seleccionarUbicacion = (ubic, e) => {
+  e.cancelBubble = true
+
+  const shape = e.target.getNode ? e.target.getNode() : e.target
+  const tr = transformerRef.value?.getNode?.()
+  const stage = stageRef.value?.getNode?.()
+  if (!shape || !tr || !stage) return
+
+  // 🔹 Desactivar selección previa
+  tr.nodes([])
+  stage.find('.ubicacionRect').forEach((n) => {
+    const node = n.getNode ? n.getNode() : n
+    if (node) node.draggable(false)
   })
 
-  if (containerRef.value) {
-    resizeObserver.observe(containerRef.value)
+  // 🔹 Activar edición para la actual
+  shape.draggable(true)
+  tr.nodes([shape])
+  shape.getLayer().batchDraw()
+
+  console.log(`✏️ Seleccionada ubicación: ${ubic.descripcion}`)
+}
+
+let clickTimeout = null
+
+const handleUbicacionClick = (e, ubic) => {
+  e.cancelBubble = true // Evita que suba a stage
+
+  if (clickTimeout) {
+    // 🔹 Si ya hay un click reciente → es doble click
+    clearTimeout(clickTimeout)
+    clickTimeout = null
+    abrirDetalle(ubic)
+    return
   }
-})
-onBeforeUnmount(() => {
-  if (resizeObserver && containerRef.value) {
-    resizeObserver.unobserve(containerRef.value)
+
+  // 🔹 Si es el primer click → espera un poco por si hay un segundo
+  clickTimeout = setTimeout(() => {
+    seleccionarUbicacion(ubic, e)
+    clickTimeout = null
+  }, 200) // 200 ms diferencia entre click y doble click
+}
+
+const onDragEnd = async (ubic, e) => {
+  const pos = e.target.position()
+  ubic.x = pos.x
+  ubic.y = pos.y
+  try {
+    await updateUbicacion(ubic.id, { x: ubic.x, y: ubic.y })
+    console.log(`📍 Ubicación ${ubic.descripcion} movida`)
+  } catch (err) {
+    console.error('❌ Error al mover ubicación:', err)
   }
-})
+}
+
+const onTransformEnd = async (ubic, e) => {
+  const shape = e.target
+  const scaleX = shape.scaleX()
+  const scaleY = shape.scaleY()
+
+  // 🔹 Calcular el nuevo ancho y alto reales (sin proporción)
+  const newWidth = Math.max(20, shape.width() * scaleX)
+  const newHeight = Math.max(20, shape.height() * scaleY)
+
+  // 🔹 Restablecer escalado (para evitar acumulación)
+  shape.scaleX(1)
+  shape.scaleY(1)
+
+  // 🔹 Actualizar posición y tamaño
+  ubic.x = shape.x()
+  ubic.y = shape.y()
+  ubic.width = newWidth
+  ubic.height = newHeight
+
+  // 🔹 Aplicar visualmente
+  shape.width(newWidth)
+  shape.height(newHeight)
+  shape.getLayer().batchDraw()
+
+  try {
+    await updateUbicacion(ubic.id, {
+      x: ubic.x,
+      y: ubic.y,
+      width: ubic.width,
+      height: ubic.height,
+    })
+    console.log(`✅ Ubicación ${ubic.descripcion} actualizada libremente`)
+  } catch (err) {
+    console.error('❌ Error al actualizar ubicación:', err)
+  }
+}
+
+
+
+
+// ==========================
+// 🔹 Eventos del modal AddBodega
+// ==========================
+const onBodegaCreada = (nueva) => {
+  // Limpiar ubicaciones anteriores
+  ubicacionesActivas.value = []
+  previewPunto.value = null
+  dibujando.value = false
+
+  bodegas.value.push(nueva)
+  bodegaActiva.value = nueva
+  mostrarModalBodega.value = false
+
+  console.log('✅ Nueva bodega agregada y ubicaciones reseteadas:', nueva)
+}
+const onBodegaActualizada = (actualizada) => {
+  const index = bodegas.value.findIndex((b) => b.id === actualizada.id)
+  if (index !== -1) bodegas.value[index] = actualizada
+
+  if (bodegaActiva.value?.id === actualizada.id) {
+    bodegaActiva.value = actualizada
+  }
+
+  bodegaEditando.value = null
+  mostrarModalBodega.value = false
+  console.log('✅ Bodega actualizada:', actualizada)
+}
+
+
+// ==========================
+// 🔹 Utilidad visual
+// ==========================
+const darkenColor = (hex, factor = 0.25) => {
+  if (!hex?.startsWith('#')) return hex
+  const c = parseInt(hex.slice(1), 16)
+  const r = (c >> 16) & 255
+  const g = (c >> 8) & 255
+  const b = c & 255
+  const darker = (v) => Math.max(0, Math.floor(v * (1 - factor)))
+  return `rgb(${darker(r)}, ${darker(g)}, ${darker(b)})`
+}
 </script>
 
 <template>
   <div class="min-h-screen bg-gray-50 p-8">
     <div class="max-w-6xl mx-auto bg-white shadow-lg rounded-xl p-6">
+
+      <!-- 🔹 Header principal -->
       <div class="flex justify-between items-center mb-6">
         <h1 class="text-3xl font-bold text-indigo-700 flex items-center gap-2">
           <Icon icon="mdi:warehouse" class="text-indigo-600 w-8 h-8" />
           Gestión de Bodegas
         </h1>
         <button
-          @click="crearBodega"
+          @click="mostrarModalBodega = true"
           class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition"
         >
           <Icon icon="mdi:shape-polygon-plus" class="w-5 h-5" />
@@ -423,14 +316,15 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
+      <!-- 🔸 Listado de bodegas -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <div
           v-for="b in bodegas"
           :key="b.id"
           @click="seleccionarBodega(b)"
           class="cursor-pointer rounded-lg border p-4 shadow-sm hover:shadow-md transition"
-          :class="bodegaActiva?.id === b.id 
-            ? 'bg-indigo-50 border-indigo-400' 
+          :class="bodegaActiva?.id === b.id
+            ? 'bg-indigo-50 border-indigo-400'
             : 'bg-white border-gray-200'"
         >
           <div class="flex items-center justify-between mb-2">
@@ -438,63 +332,32 @@ onBeforeUnmount(() => {
               <Icon icon="mdi:warehouse" class="w-5 h-5 text-indigo-600" />
               {{ b.nombre }}
             </h3>
-            <span
-              v-if="b.isDeleted"
-              class="px-2 py-0.5 text-xs bg-red-100 text-red-600 rounded-full"
+
+            <button
+              @click.stop="editarBodega(b)"
+              class="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
             >
-              Eliminada
-            </span>
+              <Icon icon="mdi:pencil" class="w-4 h-4" />
+              Editar
+            </button>
           </div>
+          <p class="text-sm text-gray-600">📍 {{ b.direccion || 'Sin dirección' }}</p>
           <p class="text-sm text-gray-600">
-            📍 {{ b.direccion || 'Sin dirección' }}
-          </p>
-          <p class="text-sm text-gray-600">
-            👤 Encargado: <span class="font-medium">{{ b.nombreEncargado || 'N/A' }}</span>
+            👤 Encargado:
+            <span class="font-medium">{{ b.nombreEncargado || 'N/A' }}</span>
           </p>
         </div>
       </div>
 
-
-      <div v-if="dibujando" class="flex gap-2 mb-4">
-        <button
-          @click="
-            () => {
-              modoDibujo = 'polygon'
-              dibujando = true
-              bodegaActiva.puntos = []
-            }
-          "
-          class="flex items-center gap-2 px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700"
-        >
-          <Icon icon="mdi:vector-polygon" class="w-4 h-4" />
-          Polígono
-        </button>
-        <button
-          @click="
-            () => {
-              modoDibujo = 'rect'
-              dibujando = true
-              bodegaActiva.puntos = []
-            }
-          "
-          class="flex items-center gap-2 px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
-        >
-          <Icon icon="mdi:rectangle-outline" class="w-4 h-4" />
-          Rectángulo
-        </button>
-      </div>
-
+      <!-- 🔹 Lienzo principal -->
       <div
-        v-if="bodegaActiva"
+        v-if="bodegaActiva && !mostrarModalBodega"
         ref="containerRef"
         class="relative rounded-xl overflow-hidden shadow-lg bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200"
       >
-        <div
-          class="flex justify-between items-center px-4 py-3 border-b bg-white/80 backdrop-blur-sm"
-        >
-          <h2
-            class="text-lg font-semibold text-indigo-700 flex items-center gap-2"
-          >
+        <!-- Header de bodega -->
+        <div class="flex justify-between items-center px-4 py-3 border-b bg-white/80 backdrop-blur-sm">
+          <h2 class="text-lg font-semibold text-indigo-700 flex items-center gap-2">
             <Icon icon="mdi:warehouse" class="w-5 h-5 text-indigo-600" />
             {{ bodegaActiva.nombre }}
           </h2>
@@ -517,310 +380,130 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div
-          class="h-[500px] md:h-[600px] lg:h-[700px] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"
-        >
-        <div v-if="seccionEditando" class="absolute top-16 right-4 z-50">
-          <button
-            @click="seccionEditando = null"
-            class="flex items-center gap-1 px-3 py-1 bg-yellow-600 text-white rounded shadow hover:bg-yellow-700 transition"
-          >
-            <Icon icon="mdi:check" class="w-4 h-4" />
-            Terminar edición
-          </button>
-        </div>
-          <v-stage
-            ref="stageRef"
-            :config="{
-              width: containerRef?.offsetWidth || 800,
-              height: containerRef?.offsetHeight || 500,
-            }"
-            style="width: 100%; height: 100%"
-            @click="agregarPunto"
-            @mousemove="moverMouse"
-          >
-            <v-layer>
-              <v-circle
-                v-if="dibujando && bodegaActiva?.puntos?.length"
-                :config="{
-                  x: bodegaActiva.puntos[0],
-                  y: bodegaActiva.puntos[1],
-                  radius: 8,
-                  fill: '#fff',
-                  stroke: '#10b981',
-                  strokeWidth: 2,
-                  shadowBlur: 4,
-                }"
-              />
+        <!-- 🎨 Stage principal -->
+        <div class="h-[500px] md:h-[600px] lg:h-[700px] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
+          <!-- ✅ Reemplaza tu bloque de v-stage por este -->
+          <ClientOnly>
+            <v-stage
+              ref="stageRef"
+              :config="{
+                width: containerRef?.offsetWidth || 800,
+                height: containerRef?.offsetHeight || 500,
+              }"
+              style="width: 100%; height: 100%"
+            >
+              <v-layer ref="layerRef" :config="{ listening: true }">
 
-              <v-line
-                v-if="bodegaActiva?.puntos && bodegaActiva.puntos.length > 1"
-                :config="{
-                  points: bodegaActiva.puntos,
-                  stroke: '#374151',
-                  strokeWidth: 2,
-                  closed: bodegaActiva.cerrado,
-                  fill: bodegaActiva.cerrado
-                    ? 'rgba(99,102,241,0.08)'
-                    : undefined,
-                }"
-              />
+                <!-- ✅ Transformer dentro del layer, con su config declarativa -->
+                <v-transformer
+                  ref="transformerRef"
+                  :config="{
+                    enabledAnchors: [
+                      'top-left', 'top-right',
+                      'bottom-left', 'bottom-right'
+                    ],
+                    anchorStroke: 'dodgerblue',
+                    anchorFill: 'white',
+                    anchorSize: 8,
+                    borderStroke: 'dodgerblue',
+                    keepRatio: false,
+                    rotateEnabled: false, 
+                  }"
+                />
 
-              <v-line
-                v-if="dibujando && previewPunto && bodegaActiva?.puntos?.length"
-                :config="{
-                  points: [
-                    ...bodegaActiva.puntos,
-                    previewPunto.x,
-                    previewPunto.y,
-                  ],
-                  stroke: '#6366f1',
-                  dash: [6, 4],
-                  strokeWidth: 2,
-                }"
-              />
 
-              <v-rect
-                v-if="
-                  dibujando &&
-                  modoDibujo === 'rect' &&
-                  inicioRect &&
-                  previewPunto
-                "
-                :config="{
-                  x: Math.min(inicioRect.x, previewPunto.x),
-                  y: Math.min(inicioRect.y, previewPunto.y),
-                  width: Math.abs(previewPunto.x - inicioRect.x),
-                  height: Math.abs(previewPunto.y - inicioRect.y),
-                  stroke: '#3b82f6',
-                  dash: [6, 4],
-                  strokeWidth: 2,
-                  fill: 'rgba(59,130,246,0.12)',
-                }"
-              />
+                <!-- 🔷 Fondo rectangular de la bodega (si tienes layout) -->
+                <v-rect
+                  v-if="bodegaActiva?.layout"
+                  :config="{
+                    x: 20,
+                    y: 20,
+                    width: bodegaActiva.layout.ancho,
+                    height: bodegaActiva.layout.alto,
+                    fill: 'rgba(147,197,253,0.15)',
+                    stroke: '#1e3a8a',
+                    strokeWidth: 2,
+                    cornerRadius: 10,
+                    shadowBlur: 8,
+                    listening: false,
+                  }"
+                />
 
-              <template v-for="sec in bodegaActiva.secciones" :key="sec.id">
-                <v-group
-                  :config="{ x: sec.x, y: sec.y, draggable: true }"
-                  @dragend="moverSeccion(sec, $event)"
-                  @dblclick="() => { if (!seccionEditando) abrirDetalle(sec) }"
-                >
+                <v-line
+                  v-else-if="bodegaActiva?.puntos?.length > 1"
+                  :config="{
+                    points: bodegaActiva.puntos,
+                    closed: bodegaActiva.cerrado,
+                    stroke: '#2563eb',
+                    strokeWidth: 3,
+                    lineJoin: 'round',
+                    fill: bodegaActiva.cerrado ? 'rgba(37,99,235,0.08)' : undefined,
+                    listening: false,
+                  }"
+                />
+
+                <!-- 🟧 Ubicaciones editables -->
+                <template v-for="ubic in ubicacionesActivas" :key="ubic._key">
                   <v-rect
-                    :ref="(el) => (sec.node = el)"
                     :config="{
-                      width: sec.width,
-                      height: sec.height,
-                      fill: '#3b82f6',
-                      opacity: 0.9,
-                      stroke: '#1e40af',
+                      id: ubic._key,
+                      x: ubic.x ?? 0,
+                      y: ubic.y ?? 0,
+                      width: ubic.width ?? 100,
+                      height: ubic.height ?? 60,
+                      fill: ubic.color || '#f97316',
+                      stroke: darkenColor(ubic.color || '#f97316', 0.25),
                       strokeWidth: 2,
                       cornerRadius: 6,
-                      shadowBlur: 6,
-                      name: `sec-${sec.id}`,
+                      shadowBlur: 4,
+                      draggable: true,
+                      opacity: 0.9,
+                      name: 'ubicacionRect',
                     }"
-                    @transformend="onTransformEnd(sec, $event)"
+                    @mousedown="(e) => handleUbicacionClick(e, ubic)"
+                    @transformend="(e) => onTransformEnd(ubic, e)"
+                    @dragend="(e) => onDragEnd(ubic, e)"
                   />
+
+
                   <v-text
                     :config="{
-                      x: 0,
-                      y: sec.height / 2 - 8,
-                      width: sec.width,
+                      text: ubic.descripcion || 'Ubicación',
+                      x: ubic.x ?? 0,
+                      y: (ubic.y ?? 0) + (ubic.height ?? 60) / 2 - 8,
+                      width: ubic.width ?? 100,
                       align: 'center',
-                      text: sec.nombre,
-                      fontSize: 14,
-                      fill: 'white',
-                      fontStyle: 'bold',
-                    }"
-                  />
-                  <v-text
-                    :config="{
-                      x: sec.width - 16,
-                      y: 4,
-                      text: '✕',
-                      fontSize: 14,
-                      fill: 'white',
-                      fontStyle: 'bold',
-                      cursor: 'pointer',
-                    }"
-                    @click="borrarSeccion(sec)"
-                  />
-
-                  <v-text
-                    v-if="seccionEditando?.id !== sec.id"
-                    :config="{
-                      x: sec.width - 20,
-                      y: sec.height - 20,
-                      text: '✏️',
-                      fontSize: 14,
-                      fill: 'yellow',
-                      cursor: 'pointer',
-                    }"
-                    @click="editarSeccion(sec)"
-                  />
-
-                </v-group>
-                <v-transformer
-                  v-if="seccionEditando?.id === sec.id"
-                  :config="{
-                    nodes: [sec.node?.getNode()],
-                    enabledAnchors: [
-                      'top-left',
-                      'top-right',
-                      'bottom-left',
-                      'bottom-right',
-                    ],
-                    rotateEnabled: false,
-                    keepRatio: false,
-                  }"
-                />
-              </template>
-              <template v-for="ubic in ubicacionesActivas" :key="ubic._key">
-                <v-group
-                  :config="{ x: ubic.x, y: ubic.y }"
-                  @click="abrirUbicacion(ubic)"
-                  @dblclick="() => {
-                    if (ubic.simulatedPosition) {
-                      detalleSeccion.value = seccionDemo // de momento usamos demo
-                    } else {
-                      abrirUbicacion(ubic)
-                    }
-                  }"
-                >
-                  <v-circle
-                    :config="{
-                      radius: 14,
-                      fill: ubic.simulatedPosition ? '#fbbf24' : '#ee9452',
-                      stroke: ubic.simulatedPosition ? '#d97706' : '#c2410c',
-                      strokeWidth: 2,
-                      shadowBlur: 8,
-                    }"
-                  />
-                  <v-text
-                    :config="{
-                      x: 20,
-                      y: -6,
-                      text: ubic.nombre,
                       fontSize: 13,
                       fontStyle: 'bold',
-                      fill: '#1f2937',
+                      fill: 'white',
                     }"
                   />
-                </v-group>
-              </template>
+                </template>
 
-            </v-layer>
-          </v-stage>
+              </v-layer>
+            </v-stage>
+          </ClientOnly>
+
+
         </div>
       </div>
-      <div
-        v-if="ubicacionesActivas.length"
-        class="mt-8"
-      >
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-xl font-semibold text-indigo-700 flex items-center gap-2">
-            <Icon icon="mdi:map-marker" class="w-5 h-5 text-indigo-600" />
-            Ubicaciones en bodega
-          </h3>
-          <span class="text-sm text-gray-500">
-            {{ ubicacionesActivas.length }} ubicaciones
-          </span>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div
-            v-for="ubic in ubicacionesActivas"
-            :key="ubic._key + '-card'"
-            class="relative rounded-lg border border-indigo-100 bg-white/80 backdrop-blur-sm p-4 shadow-sm hover:shadow-md transition"
-            @click="abrirUbicacion(ubic)"
-          >
-            <button
-              class="absolute top-3 right-3 text-xs font-semibold text-red-500 hover:text-red-600"
-              @click.stop="eliminarUbicacion(ubic)"
-              type="button"
-            >
-              X
-            </button>
-            <div class="flex items-start gap-3">
-              <div
-                class="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100 text-orange-600 font-semibold"
-              >
-                {{ (ubic.nombre || 'U').charAt(0).toUpperCase() }}
-              </div>
-              <div class="space-y-1 text-sm">
-                <h4 class="text-base font-semibold text-gray-800">
-                  {{ ubic.nombre }}
-                </h4>
-                <p
-                  v-if="ubic.descripcion && ubic.descripcion !== ubic.nombre"
-                  class="text-gray-600"
-                >
-                  {{ ubic.descripcion }}
-                </p>
-                <p v-if="ubic.codigo" class="text-xs uppercase tracking-wide text-indigo-500">
-                  Codigo: {{ ubic.codigo }}
-                </p>
-                <p v-if="ubic.capacidad" class="text-xs text-gray-500">
-                  Capacidad: {{ ubic.capacidad }}
-                </p>
-                <p v-if="ubic.simulatedPosition" class="text-xs text-gray-400 italic">
-                  Posicion mostrada de forma simulada
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div v-if="detalleUbicacion" class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        <div class="lg:col-span-2 rounded-xl border border-indigo-100 bg-white/90 backdrop-blur-sm p-5 shadow-lg">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-xl font-semibold text-indigo-700">
-              Detalle de {{ detalleUbicacion.nombre }}
-            </h3>
-            <button
-              class="text-sm text-indigo-500 hover:text-indigo-600 font-semibold"
-              type="button"
-              @click="cerrarDetalleUbicacion()"
-            >
-              Cerrar
-            </button>
-          </div>
-          <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
-            <div>
-              <dt class="font-semibold text-gray-900">Descripcion</dt>
-              <dd>{{ detalleUbicacion.descripcion || 'Sin descripcion' }}</dd>
-            </div>
-            <div>
-              <dt class="font-semibold text-gray-900">Codigo</dt>
-              <dd>{{ detalleUbicacion.codigo || 'Sin codigo' }}</dd>
-            </div>
-            <div>
-              <dt class="font-semibold text-gray-900">Capacidad</dt>
-              <dd>{{ detalleUbicacion.capacidad ?? 'Desconocida' }}</dd>
-            </div>
-            <div>
-              <dt class="font-semibold text-gray-900">Posicion</dt>
-              <dd>{{ detalleUbicacion.x }}, {{ detalleUbicacion.y }} <span v-if="detalleUbicacion.simulatedPosition" class="italic text-xs text-gray-500">(simulada)</span></dd>
-            </div>
-          </dl>
-        </div>
-        <div class="rounded-xl border border-gray-200 bg-white p-5 shadow" v-if="detalleUbicacion?.medicamentos?.length">
-          <h4 class="text-lg font-semibold text-gray-800 mb-3">Medicamentos almacenados</h4>
-          <ul class="space-y-2 text-sm text-gray-700">
-            <li v-for="med in detalleUbicacion.medicamentos" :key="med.id || med.nombre" class="flex justify-between border-b border-gray-100 pb-2">
-              <span class="font-medium">{{ med.nombre || 'Producto' }}</span>
-              <span class="text-gray-500">{{ med.cantidad ?? med.stock ?? '?' }} unidades</span>
-            </li>
-          </ul>
-        </div>
-      </div>
+
+      <!-- 🔹 Modal de creación -->
+      <AddBodega
+        v-if="mostrarModalBodega"
+        :bodega="bodegaEditando"
+        @cerrar="
+          mostrarModalBodega = false;
+          bodegaEditando = null;
+        "
+        @creada="onBodegaCreada"
+        @actualizada="onBodegaActualizada"
+      />
       <DetalleSeccion
-                  v-if="detalleSeccion"
-                  :seccion="seccionDemo"
-                  @cerrar="detalleSeccion = null"
-                />
-
-      <p v-else class="text-gray-500 italic">
-        Crea una bodega y dibuja su polígono en el lienzo.
-      </p>
+        v-if="ubicacionSeleccionada"
+        :seccion="ubicacionSeleccionada"
+        @cerrar="ubicacionSeleccionada = null"
+      />
     </div>
   </div>
 </template>

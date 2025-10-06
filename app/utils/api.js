@@ -11,14 +11,20 @@ export const useApi = () => {
       credentials: 'include',
       onRequest({ options }) {
         const token = useCookie('token').value
-        if (token) {
-          options.headers = {
-            ...options.headers,
-            Authorization: `Bearer ${token}`,
-          }
+
+        // 🔹 Detectar si el body es FormData o JSON
+        const isFormData = options.body instanceof FormData
+
+        options.headers = {
+          ...options.headers,
+          ...(token && { Authorization: `Bearer ${token}` }),
+          ...(isFormData
+            ? {} // si es FormData, no forzamos el tipo
+            : { 'Content-Type': 'application/json' }), // 👈 importante
         }
       },
     })
   }
+
   return apiInstance
 }
