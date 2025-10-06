@@ -1,16 +1,21 @@
 import { defineNuxtConfig } from 'nuxt/config'
 
 export default defineNuxtConfig({
-  typescript: {
-    tsConfig: {
-      compilerOptions: {
-        types: ['node'],
+  modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt', '@tresjs/nuxt'],
+  devtools: { enabled: false },
+  tres: {
+    // No custom options; remove unknown property
+  },
+  vite: {
+    resolve: {
+      alias: {
+        three: 'three',
       },
     },
+    optimizeDeps: {
+      include: ['three'],
+    },
   },
-  modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt'],
-  compatibilityDate: '2024-11-01',
-  devtools: { enabled: false },
   runtimeConfig: {
     public: {
       apiRestUrl: process.env.NUXT_PUBLIC_API_REST_URL,

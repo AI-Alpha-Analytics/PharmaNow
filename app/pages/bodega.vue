@@ -10,7 +10,7 @@ import {
   deleteBodega,
 } from '~/services/inventarioService'
 import DetalleSeccion from '~/components/detalleSeccion.vue'
-
+import Bodega3D from '~/components/bodega3D.vue'
 // ==========================
 // 🔹 Estado general
 // ==========================
@@ -28,6 +28,7 @@ const bodegaEditando = ref(null)
 const containerRef = ref(null)
 const stageRef = ref(null)
 const ubicacionEditando = ref(null)
+const modoVista = ref('2D') // o '3D'
 // ==========================
 // 🔹 Inicialización
 // ==========================
@@ -36,6 +37,7 @@ const { fetchBodegas, fetchUbicacionesByBodega } = useInventarioSocket()
 onMounted(async () => {
   try {
     bodegas.value = await fetchBodegas()
+    console.log(bodegas)
     if (bodegas.value.length) await seleccionarBodega(bodegas.value[0])
 
     const stage = stageRef.value?.getNode?.()
@@ -63,7 +65,6 @@ onMounted(async () => {
   }
 })
 
-
 const layerRef = ref(null)
 
 // ==========================
@@ -76,6 +77,7 @@ const seleccionarBodega = async (bodega) => {
 
   try {
     const ubicaciones = await fetchUbicacionesByBodega(bodega.id)
+    console.log(ubicaciones)
     ubicacionesActivas.value = ubicaciones.map((u) => ({
       ...u,
       _key: u.id || crypto.randomUUID(),
@@ -101,7 +103,6 @@ const editarBodega = (bodega) => {
   mostrarModalBodega.value = true
   console.log('✏️ Editando bodega:', bodega.nombre)
 }
-
 
 // ==========================
 // 🔹 Lógica de ubicaciones
@@ -251,9 +252,6 @@ const onTransformEnd = async (ubic, e) => {
   }
 }
 
-
-
-
 // ==========================
 // 🔹 Eventos del modal AddBodega
 // ==========================
@@ -282,7 +280,6 @@ const onBodegaActualizada = (actualizada) => {
   console.log('✅ Bodega actualizada:', actualizada)
 }
 
-
 // ==========================
 // 🔹 Utilidad visual
 // ==========================
@@ -300,7 +297,6 @@ const darkenColor = (hex, factor = 0.25) => {
 <template>
   <div class="min-h-screen bg-gray-50 p-8">
     <div class="max-w-6xl mx-auto bg-white shadow-lg rounded-xl p-6">
-
       <!-- 🔹 Header principal -->
       <div class="flex justify-between items-center mb-6">
         <h1 class="text-3xl font-bold text-indigo-700 flex items-center gap-2">
@@ -323,15 +319,29 @@ const darkenColor = (hex, factor = 0.25) => {
           :key="b.id"
           @click="seleccionarBodega(b)"
           class="cursor-pointer rounded-lg border p-4 shadow-sm hover:shadow-md transition"
-          :class="bodegaActiva?.id === b.id
-            ? 'bg-indigo-50 border-indigo-400'
-            : 'bg-white border-gray-200'"
+          :class="
+            bodegaActiva?.id === b.id
+              ? 'bg-indigo-50 border-indigo-400'
+              : 'bg-white border-gray-200'
+          "
         >
           <div class="flex items-center justify-between mb-2">
-            <h3 class="text-lg font-bold text-indigo-700 flex items-center gap-2">
+            <h3
+              class="text-lg font-bold text-indigo-700 flex items-center gap-2"
+            >
               <Icon icon="mdi:warehouse" class="w-5 h-5 text-indigo-600" />
               {{ b.nombre }}
             </h3>
+            <button
+              @click="modoVista = modoVista === '2D' ? '3D' : '2D'"
+              class="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md shadow hover:bg-indigo-700 transition"
+            >
+              <Icon
+                :icon="modoVista === '2D' ? 'mdi:cube' : 'mdi:vector-square'"
+                class="w-4 h-4"
+              />
+              {{ modoVista === '2D' ? 'Vista 3D' : 'Vista 2D' }}
+            </button>
 
             <button
               @click.stop="editarBodega(b)"
@@ -341,7 +351,9 @@ const darkenColor = (hex, factor = 0.25) => {
               Editar
             </button>
           </div>
-          <p class="text-sm text-gray-600">📍 {{ b.direccion || 'Sin dirección' }}</p>
+          <p class="text-sm text-gray-600">
+            📍 {{ b.direccion || 'Sin dirección' }}
+          </p>
           <p class="text-sm text-gray-600">
             👤 Encargado:
             <span class="font-medium">{{ b.nombreEncargado || 'N/A' }}</span>
@@ -356,8 +368,12 @@ const darkenColor = (hex, factor = 0.25) => {
         class="relative rounded-xl overflow-hidden shadow-lg bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200"
       >
         <!-- Header de bodega -->
-        <div class="flex justify-between items-center px-4 py-3 border-b bg-white/80 backdrop-blur-sm">
-          <h2 class="text-lg font-semibold text-indigo-700 flex items-center gap-2">
+        <div
+          class="flex justify-between items-center px-4 py-3 border-b bg-white/80 backdrop-blur-sm"
+        >
+          <h2
+            class="text-lg font-semibold text-indigo-700 flex items-center gap-2"
+          >
             <Icon icon="mdi:warehouse" class="w-5 h-5 text-indigo-600" />
             {{ bodegaActiva.nombre }}
           </h2>
@@ -381,121 +397,125 @@ const darkenColor = (hex, factor = 0.25) => {
         </div>
 
         <!-- 🎨 Stage principal -->
-        <div class="h-[500px] md:h-[600px] lg:h-[700px] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
-          <!-- ✅ Reemplaza tu bloque de v-stage por este -->
+        <div class="w-full h-[75vh] bg-gray-100 relative flex-1">
           <ClientOnly>
-            <v-stage
-              ref="stageRef"
-              :config="{
-                width: containerRef?.offsetWidth || 800,
-                height: containerRef?.offsetHeight || 500,
-              }"
-              style="width: 100%; height: 100%"
-            >
-              <v-layer ref="layerRef" :config="{ listening: true }">
+            <!-- 🔹 Vista 2D -->
+            <div v-if="modoVista === '2D'" class="w-full h-full">
+              <v-stage
+                ref="stageRef"
+                :config="{
+                  width: containerRef?.offsetWidth || 800,
+                  height: containerRef?.offsetHeight || 500,
+                }"
+                style="width: 100%; height: 100%"
+              >
+                <v-layer ref="layerRef" :config="{ listening: true }">
+                  <!-- ✅ Transformer dentro del layer, con su config declarativa -->
+                  <v-transformer
+                    ref="transformerRef"
+                    :config="{
+                      enabledAnchors: [
+                        'top-left',
+                        'top-right',
+                        'bottom-left',
+                        'bottom-right',
+                      ],
+                      anchorStroke: 'dodgerblue',
+                      anchorFill: 'white',
+                      anchorSize: 8,
+                      borderStroke: 'dodgerblue',
+                      keepRatio: false,
+                      rotateEnabled: false,
+                    }"
+                  />
 
-                <!-- ✅ Transformer dentro del layer, con su config declarativa -->
-                <v-transformer
-                  ref="transformerRef"
-                  :config="{
-                    enabledAnchors: [
-                      'top-left', 'top-right',
-                      'bottom-left', 'bottom-right'
-                    ],
-                    anchorStroke: 'dodgerblue',
-                    anchorFill: 'white',
-                    anchorSize: 8,
-                    borderStroke: 'dodgerblue',
-                    keepRatio: false,
-                    rotateEnabled: false, 
-                  }"
-                />
-
-
-                <!-- 🔷 Fondo rectangular de la bodega (si tienes layout) -->
-                <v-rect
-                  v-if="bodegaActiva?.layout"
-                  :config="{
-                    x: 20,
-                    y: 20,
-                    width: bodegaActiva.layout.ancho,
-                    height: bodegaActiva.layout.alto,
-                    fill: 'rgba(147,197,253,0.15)',
-                    stroke: '#1e3a8a',
-                    strokeWidth: 2,
-                    cornerRadius: 10,
-                    shadowBlur: 8,
-                    listening: false,
-                  }"
-                />
-
-                <v-line
-                  v-else-if="bodegaActiva?.puntos?.length > 1"
-                  :config="{
-                    points: bodegaActiva.puntos,
-                    closed: bodegaActiva.cerrado,
-                    stroke: '#2563eb',
-                    strokeWidth: 3,
-                    lineJoin: 'round',
-                    fill: bodegaActiva.cerrado ? 'rgba(37,99,235,0.08)' : undefined,
-                    listening: false,
-                  }"
-                />
-
-                <!-- 🟧 Ubicaciones editables -->
-                <template v-for="ubic in ubicacionesActivas" :key="ubic._key">
+                  <!-- 🔷 Fondo rectangular de la bodega (si tienes layout) -->
                   <v-rect
+                    v-if="bodegaActiva?.layout"
                     :config="{
-                      id: ubic._key,
-                      x: ubic.x ?? 0,
-                      y: ubic.y ?? 0,
-                      width: ubic.width ?? 100,
-                      height: ubic.height ?? 60,
-                      fill: ubic.color || '#f97316',
-                      stroke: darkenColor(ubic.color || '#f97316', 0.25),
+                      x: 20,
+                      y: 20,
+                      width: bodegaActiva.layout.ancho,
+                      height: bodegaActiva.layout.alto,
+                      fill: 'rgba(147,197,253,0.15)',
+                      stroke: '#1e3a8a',
                       strokeWidth: 2,
-                      cornerRadius: 6,
-                      shadowBlur: 4,
-                      draggable: true,
-                      opacity: 0.9,
-                      name: 'ubicacionRect',
+                      cornerRadius: 10,
+                      shadowBlur: 8,
+                      listening: false,
                     }"
-                    @mousedown="(e) => handleUbicacionClick(e, ubic)"
-                    @transformend="(e) => onTransformEnd(ubic, e)"
-                    @dragend="(e) => onDragEnd(ubic, e)"
                   />
 
-
-                  <v-text
+                  <v-line
+                    v-else-if="bodegaActiva?.puntos?.length > 1"
                     :config="{
-                      text: ubic.descripcion || 'Ubicación',
-                      x: ubic.x ?? 0,
-                      y: (ubic.y ?? 0) + (ubic.height ?? 60) / 2 - 8,
-                      width: ubic.width ?? 100,
-                      align: 'center',
-                      fontSize: 13,
-                      fontStyle: 'bold',
-                      fill: 'white',
+                      points: bodegaActiva.puntos,
+                      closed: bodegaActiva.cerrado,
+                      stroke: '#2563eb',
+                      strokeWidth: 3,
+                      lineJoin: 'round',
+                      fill: bodegaActiva.cerrado
+                        ? 'rgba(37,99,235,0.08)'
+                        : undefined,
+                      listening: false,
                     }"
                   />
-                </template>
 
-              </v-layer>
-            </v-stage>
+                  <!-- 🟧 Ubicaciones editables -->
+                  <template v-for="ubic in ubicacionesActivas" :key="ubic._key">
+                    <v-rect
+                      :config="{
+                        id: ubic._key,
+                        x: ubic.x ?? 0,
+                        y: ubic.y ?? 0,
+                        width: ubic.width ?? 100,
+                        height: ubic.height ?? 60,
+                        fill: ubic.color || '#f97316',
+                        stroke: darkenColor(ubic.color || '#f97316', 0.25),
+                        strokeWidth: 2,
+                        cornerRadius: 6,
+                        shadowBlur: 4,
+                        draggable: true,
+                        opacity: 0.9,
+                        name: 'ubicacionRect',
+                      }"
+                      @mousedown="(e) => handleUbicacionClick(e, ubic)"
+                      @transformend="(e) => onTransformEnd(ubic, e)"
+                      @dragend="(e) => onDragEnd(ubic, e)"
+                    />
+                    <v-text
+                      :config="{
+                        text: ubic.descripcion || 'Ubicación',
+                        x: ubic.x ?? 0,
+                        y: (ubic.y ?? 0) + (ubic.height ?? 60) / 2 - 8,
+                        width: ubic.width ?? 100,
+                        align: 'center',
+                        fontSize: 13,
+                        fontStyle: 'bold',
+                        fill: 'white',
+                      }"
+                    />
+                  </template>
+                </v-layer>
+              </v-stage>
+            </div>
+
+            <!-- 🔹 Vista 3D -->
+            <Bodega3D
+              v-else
+              :ubicaciones="ubicacionesActivas"
+              class="w-full h-full"
+            />
           </ClientOnly>
-
-
         </div>
+
       </div>
 
       <!-- 🔹 Modal de creación -->
       <AddBodega
         v-if="mostrarModalBodega"
         :bodega="bodegaEditando"
-        @cerrar="
-          mostrarModalBodega = false;
-          bodegaEditando = null;
-        "
+        @cerrar="mostrarModalBodega = false; bodegaEditando = null"
         @creada="onBodegaCreada"
         @actualizada="onBodegaActualizada"
       />
