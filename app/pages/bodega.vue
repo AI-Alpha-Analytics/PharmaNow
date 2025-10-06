@@ -29,15 +29,50 @@ const containerRef = ref(null)
 const stageRef = ref(null)
 const ubicacionEditando = ref(null)
 const modoVista = ref('2D') // o '3D'
+const modoEdicion = ref(false)
+const mostrarAvisoBloqueo = ref(false)
+
 // ==========================
 // 🔹 Inicialización
 // ==========================
 const { fetchBodegas, fetchUbicacionesByBodega } = useInventarioSocket()
+watch(modoEdicion, (nuevoValor) => {
+  if (!nuevoValor) {
+    // Cuando se desactiva el modo edición, mostrar aviso breve
+    mostrarAvisoBloqueo.value = true
+    setTimeout(() => {
+      mostrarAvisoBloqueo.value = false
+    }, 4000) // 👈 4 segundos visibles
+  } else {
+    mostrarAvisoBloqueo.value = false
+  }
+})
+
+const activarEdicionUbicacion = (ubic) => {
+  // Activa modo edición global si no lo está
+  if (!modoEdicion.value) modoEdicion.value = true
+
+  const stage = stageRef.value?.getNode?.()
+  const tr = transformerRef.value?.getNode?.()
+  if (!stage || !tr) return
+
+  // Buscar el rectángulo dentro del grupo
+  const groupNode = stage.findOne(`#${ubic._key}`)
+  if (!groupNode) return
+  const rect = groupNode.findOne('.ubicacionRect')
+
+  if (rect) {
+    rect.transformsEnabled('all')
+    tr.nodes([rect])
+    tr.getLayer().batchDraw()
+    console.log(`🟨 Editando manualmente: ${ubic.descripcion}`)
+  }
+}
+
 
 onMounted(async () => {
   try {
     bodegas.value = await fetchBodegas()
-    console.log(bodegas)
     if (bodegas.value.length) await seleccionarBodega(bodegas.value[0])
 
     const stage = stageRef.value?.getNode?.()
@@ -77,7 +112,6 @@ const seleccionarBodega = async (bodega) => {
 
   try {
     const ubicaciones = await fetchUbicacionesByBodega(bodega.id)
-    console.log(ubicaciones)
     ubicacionesActivas.value = ubicaciones.map((u) => ({
       ...u,
       _key: u.id || crypto.randomUUID(),
@@ -120,6 +154,7 @@ const agregarSeccion = async () => {
     width: 120,
     height: 80,
     color: '#f97316',
+    z: 0, // 👈 En 2D, Z representa altura del pallet o nivel
   }
 
   try {
@@ -134,16 +169,76 @@ const agregarSeccion = async () => {
   }
 }
 
-const onUbicacionDragEnd = async (ubic, e) => {
-  const pos = e.target.position()
-  ubic.x = pos.x
-  ubic.y = pos.y
+
+// ==========================
+// 💾 Guardar y cancelar edición
+// ==========================
+const guardarCambiosUbicaciones = async () => {
+  if (!bodegaActiva.value) return
+
   try {
-    await updateUbicacion(ubic.id, { x: ubic.x, y: ubic.y })
-    console.log(`✅ Ubicación ${ubic.descripcion} actualizada`, ubic)
+    const stage = stageRef.value?.getNode?.()
+    if (stage) {
+      stage.find('.ubicacionGroup').forEach((groupNode) => {
+        const id = groupNode.id()
+        const ubic = ubicacionesActivas.value.find(u => u._key === id)
+        if (!ubic) return
+
+        // 🔸 posición del grupo
+        ubic.x = groupNode.x()
+        ubic.y = groupNode.y()
+
+        // 🔸 tamaño del rect (aplicando escalado)
+        const rectNode = groupNode.findOne('.ubicacionRect')
+        if (rectNode) {
+          const scaleX = rectNode.scaleX() || 1
+          const scaleY = rectNode.scaleY() || 1
+
+          ubic.width  = rectNode.width()  * scaleX
+          ubic.height = rectNode.height() * scaleY
+
+          // limpia el escalado visual
+          rectNode.scale({ x: 1, y: 1 })
+        }
+      })
+    }
+
+    // 🔹 Guarda en backend
+    await Promise.all(
+      ubicacionesActivas.value.map((u) =>
+        updateUbicacion(u.id, {
+          x: u.x,
+          y: u.y,
+          width: u.width,
+          height: u.height,
+          z: u.z ?? 0,
+        })
+      )
+    )
+
+    modoEdicion.value = false
+    const ubicaciones = await fetchUbicacionesByBodega(bodegaActiva.value.id)
+    ubicacionesActivas.value = []
+    await nextTick()
+    ubicacionesActivas.value = ubicaciones.map(u => ({ ...u, _key: u.id || crypto.randomUUID() }))
   } catch (err) {
-    console.error('❌ Error al actualizar ubicación:', err)
+    console.error('❌ Error al guardar ubicaciones:', err)
   }
+}
+
+const cancelarEdicionUbicaciones = async () => {
+  if (!bodegaActiva.value) return
+  if (!confirm('¿Deseas descartar los cambios no guardados?')) return
+
+  // 🔄 Volver a cargar ubicaciones originales desde el backend
+  const ubicaciones = await fetchUbicacionesByBodega(bodegaActiva.value.id)
+  ubicacionesActivas.value = ubicaciones.map((u) => ({
+    ...u,
+    _key: u.id || crypto.randomUUID(),
+  }))
+
+  modoEdicion.value = false
+  console.log('↩️ Edición cancelada y ubicaciones restauradas')
 }
 
 const abrirDetalle = (ubic) => {
@@ -152,9 +247,10 @@ const abrirDetalle = (ubic) => {
   console.log('📦 Abriendo detalle de ubicación:', ubic.descripcion)
 }
 
-const editarUbicacion = (ubic) => {
-  ubicacionEditando.value = { ...ubic }
-  console.log('✏️ Editando ubicación:', ubic.descripcion)
+const onGroupDragMove = (ubic, e) => {
+  const pos = e.target.position()
+  ubic.x = pos.x
+  ubic.y = pos.y
 }
 
 const transformerRef = ref(null)
@@ -162,82 +258,30 @@ const selectedNode = ref(null)
 
 const seleccionarUbicacion = (ubic, e) => {
   e.cancelBubble = true
+  if (!modoEdicion.value) return
 
-  const shape = e.target.getNode ? e.target.getNode() : e.target
   const tr = transformerRef.value?.getNode?.()
-  const stage = stageRef.value?.getNode?.()
-  if (!shape || !tr || !stage) return
+  if (!tr) return
 
-  // 🔹 Desactivar selección previa
-  tr.nodes([])
-  stage.find('.ubicacionRect').forEach((n) => {
-    const node = n.getNode ? n.getNode() : n
-    if (node) node.draggable(false)
-  })
+  const target = e.target.getNode ? e.target.getNode() : e.target
+  const group = target.className === 'Group' ? target : target.getParent()
+  const rect = group.findOne('.ubicacionRect')
 
-  // 🔹 Activar edición para la actual
-  shape.draggable(true)
-  tr.nodes([shape])
-  shape.getLayer().batchDraw()
-
-  console.log(`✏️ Seleccionada ubicación: ${ubic.descripcion}`)
-}
-
-let clickTimeout = null
-
-const handleUbicacionClick = (e, ubic) => {
-  e.cancelBubble = true // Evita que suba a stage
-
-  if (clickTimeout) {
-    // 🔹 Si ya hay un click reciente → es doble click
-    clearTimeout(clickTimeout)
-    clickTimeout = null
-    abrirDetalle(ubic)
-    return
+  if (rect) {
+    rect.draggable(false) // no se mueve individualmente
+    rect.listening(true)
+    rect.transformsEnabled('all') // ✅ permite transformar
+    tr.nodes([rect])
+    tr.getLayer().batchDraw()
   }
-
-  // 🔹 Si es el primer click → espera un poco por si hay un segundo
-  clickTimeout = setTimeout(() => {
-    seleccionarUbicacion(ubic, e)
-    clickTimeout = null
-  }, 200) // 200 ms diferencia entre click y doble click
 }
 
-const onDragEnd = async (ubic, e) => {
-  const pos = e.target.position()
+
+const onGroupDragEnd = async (ubic, e) => {
+  const group = e.target
+  const pos = group.position()
   ubic.x = pos.x
   ubic.y = pos.y
-  try {
-    await updateUbicacion(ubic.id, { x: ubic.x, y: ubic.y })
-    console.log(`📍 Ubicación ${ubic.descripcion} movida`)
-  } catch (err) {
-    console.error('❌ Error al mover ubicación:', err)
-  }
-}
-
-const onTransformEnd = async (ubic, e) => {
-  const shape = e.target
-  const scaleX = shape.scaleX()
-  const scaleY = shape.scaleY()
-
-  // 🔹 Calcular el nuevo ancho y alto reales (sin proporción)
-  const newWidth = Math.max(20, shape.width() * scaleX)
-  const newHeight = Math.max(20, shape.height() * scaleY)
-
-  // 🔹 Restablecer escalado (para evitar acumulación)
-  shape.scaleX(1)
-  shape.scaleY(1)
-
-  // 🔹 Actualizar posición y tamaño
-  ubic.x = shape.x()
-  ubic.y = shape.y()
-  ubic.width = newWidth
-  ubic.height = newHeight
-
-  // 🔹 Aplicar visualmente
-  shape.width(newWidth)
-  shape.height(newHeight)
-  shape.getLayer().batchDraw()
 
   try {
     await updateUbicacion(ubic.id, {
@@ -245,11 +289,43 @@ const onTransformEnd = async (ubic, e) => {
       y: ubic.y,
       width: ubic.width,
       height: ubic.height,
+      z: ubic.z ?? 0,
     })
-    console.log(`✅ Ubicación ${ubic.descripcion} actualizada libremente`)
+    console.log(`📍 Ubicación ${ubic.descripcion} movida y guardada en ${ubic.x},${ubic.y}`)
   } catch (err) {
-    console.error('❌ Error al actualizar ubicación:', err)
+    console.error('❌ Error al guardar movimiento:', err)
   }
+}
+
+const onTransformEnd = async (ubic, e) => {
+  const rect = e.target
+  const group = rect.getParent()
+
+  const scaleX = rect.scaleX()
+  const scaleY = rect.scaleY()
+
+  const newWidth = Math.max(20, rect.width() * scaleX)
+  const newHeight = Math.max(20, rect.height() * scaleY)
+
+  rect.width(newWidth)
+  rect.height(newHeight)
+  rect.scaleX(1)
+  rect.scaleY(1)
+
+  ubic.width = newWidth
+  ubic.height = newHeight
+  ubic.x = group.x()
+  ubic.y = group.y()
+
+  rect.getLayer().batchDraw()
+
+  await updateUbicacion(ubic.id, {
+    x: ubic.x,
+    y: ubic.y,
+    width: ubic.width,
+    height: ubic.height,
+    z: ubic.z ?? 0,
+  })
 }
 
 // ==========================
@@ -267,12 +343,24 @@ const onBodegaCreada = (nueva) => {
 
   console.log('✅ Nueva bodega agregada y ubicaciones reseteadas:', nueva)
 }
-const onBodegaActualizada = (actualizada) => {
+const onBodegaActualizada = async (actualizada) => {
   const index = bodegas.value.findIndex((b) => b.id === actualizada.id)
   if (index !== -1) bodegas.value[index] = actualizada
 
   if (bodegaActiva.value?.id === actualizada.id) {
     bodegaActiva.value = actualizada
+
+    // 🔄 Refresca las ubicaciones después de guardar
+    try {
+      const ubicaciones = await fetchUbicacionesByBodega(actualizada.id)
+      ubicacionesActivas.value = ubicaciones.map((u) => ({
+        ...u,
+        _key: u.id || crypto.randomUUID(),
+      }))
+      console.log('♻️ Ubicaciones recargadas después de actualización')
+    } catch (err) {
+      console.error('❌ Error al refrescar ubicaciones:', err)
+    }
   }
 
   bodegaEditando.value = null
@@ -379,13 +467,50 @@ const darkenColor = (hex, factor = 0.25) => {
           </h2>
           <div class="flex gap-2">
             <button
-              v-if="!dibujando"
+              v-if="!modoEdicion"
+              @click="modoEdicion = true"
+              :disabled="modoVista === '3D'"
+              class="flex items-center gap-1 px-3 py-1.5 text-sm rounded-md shadow transition
+                text-white
+                bg-yellow-500 hover:bg-yellow-600
+                disabled:bg-gray-400 disabled:cursor-not-allowed disabled:hover:bg-gray-400"
+            >
+              <Icon icon="mdi:lock" class="w-4 h-4" />
+              Editar ubicaciones
+            </button>
+
+
+            <!-- 💾 Botón guardar cambios -->
+            <button
+              v-else
+              @click="guardarCambiosUbicaciones"
+              class="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-md shadow hover:bg-green-700 transition"
+            >
+              <Icon icon="mdi:check" class="w-4 h-4" />
+              Aceptar y guardar
+            </button>
+
+            <!-- ❌ Botón cancelar edición -->
+            <button
+              v-if="modoEdicion"
+              @click="cancelarEdicionUbicaciones"
+              class="flex items-center gap-1 px-3 py-1.5 bg-gray-500 text-white text-sm rounded-md shadow hover:bg-gray-600 transition"
+            >
+              <Icon icon="mdi:close" class="w-4 h-4" />
+              Cancelar
+            </button>
+
+            <!-- 🟩 Agregar nueva sección -->
+            <button
+              v-if="!dibujando && !modoEdicion"
               @click="agregarSeccion"
               class="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-md shadow hover:bg-green-700 transition"
             >
               <Icon icon="mdi:shape-square-plus" class="w-4 h-4" />
               Sección
             </button>
+
+            <!-- 🗑️ Eliminar bodega -->
             <button
               @click="borrarBodega(bodegaActiva.id)"
               class="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white text-sm rounded-md shadow hover:bg-red-700 transition"
@@ -394,13 +519,14 @@ const darkenColor = (hex, factor = 0.25) => {
               Eliminar
             </button>
           </div>
+
         </div>
 
         <!-- 🎨 Stage principal -->
         <div class="w-full h-[75vh] bg-gray-100 relative flex-1">
           <ClientOnly>
             <!-- 🔹 Vista 2D -->
-            <div v-if="modoVista === '2D'" class="w-full h-full">
+            <div v-if="modoVista === '2D'" class="w-full h-full relative">
               <v-stage
                 ref="stageRef"
                 :config="{
@@ -414,18 +540,14 @@ const darkenColor = (hex, factor = 0.25) => {
                   <v-transformer
                     ref="transformerRef"
                     :config="{
-                      enabledAnchors: [
-                        'top-left',
-                        'top-right',
-                        'bottom-left',
-                        'bottom-right',
-                      ],
+                      enabledAnchors: ['top-left','top-right','bottom-left','bottom-right'],
                       anchorStroke: 'dodgerblue',
                       anchorFill: 'white',
                       anchorSize: 8,
                       borderStroke: 'dodgerblue',
                       keepRatio: false,
                       rotateEnabled: false,
+                      ignoreStroke: true,
                     }"
                   />
 
@@ -463,41 +585,84 @@ const darkenColor = (hex, factor = 0.25) => {
 
                   <!-- 🟧 Ubicaciones editables -->
                   <template v-for="ubic in ubicacionesActivas" :key="ubic._key">
-                    <v-rect
+                    <v-group
                       :config="{
                         id: ubic._key,
                         x: ubic.x ?? 0,
                         y: ubic.y ?? 0,
-                        width: ubic.width ?? 100,
-                        height: ubic.height ?? 60,
-                        fill: ubic.color || '#f97316',
-                        stroke: darkenColor(ubic.color || '#f97316', 0.25),
-                        strokeWidth: 2,
-                        cornerRadius: 6,
-                        shadowBlur: 4,
-                        draggable: true,
-                        opacity: 0.9,
-                        name: 'ubicacionRect',
+                        draggable: modoEdicion,
+                        name: 'ubicacionGroup',
                       }"
-                      @mousedown="(e) => handleUbicacionClick(e, ubic)"
-                      @transformend="(e) => onTransformEnd(ubic, e)"
-                      @dragend="(e) => onDragEnd(ubic, e)"
-                    />
-                    <v-text
-                      :config="{
-                        text: ubic.descripcion || 'Ubicación',
-                        x: ubic.x ?? 0,
-                        y: (ubic.y ?? 0) + (ubic.height ?? 60) / 2 - 8,
-                        width: ubic.width ?? 100,
-                        align: 'center',
-                        fontSize: 13,
-                        fontStyle: 'bold',
-                        fill: 'white',
-                      }"
-                    />
+                      @click="modoEdicion ? (e) => seleccionarUbicacion(ubic, e) : undefined"
+                      @dblclick="() => abrirDetalle(ubic)"
+                      @dragmove="(e) => onGroupDragMove(ubic, e)"
+                      @dragend="modoEdicion ? (e) => onGroupDragEnd(ubic, e) : undefined"
+                    >
+
+                      <!-- 🟧 Rectángulo -->
+                      <v-rect
+                        :config="{
+                          width: ubic.width ?? 100,
+                          height: ubic.height ?? 60,
+                          fill: ubic.color || '#f97316',
+                          stroke: darkenColor(ubic.color || '#f97316', 0.25),
+                          strokeWidth: 2,
+                          cornerRadius: 6,
+                          shadowBlur: 4,
+                          opacity: 0.9,
+                          name: 'ubicacionRect',
+                          draggable: false, // solo mueve el grupo
+                          listening: true, // ✅ necesario para transformación
+                          cursor: modoEdicion ? 'move' : 'pointer',
+                        }"
+                        @transformend="modoEdicion && ((e) => onTransformEnd(ubic, e))"
+                      />
+
+                      <!-- 🏷️ Texto centrado -->
+                      <v-text
+                        :config="{
+                          text: ubic.descripcion || 'Ubicación',
+                          y: (ubic.height ?? 60) / 2 - 8,
+                          width: ubic.width ?? 100,
+                          align: 'center',
+                          fontSize: 13,
+                          fontStyle: 'bold',
+                          fill: 'white',
+                          listening: false,
+                        }"
+                      />
+                    </v-group>
+
+
                   </template>
+
                 </v-layer>
+                <div
+                  v-if="!modoEdicion && mostrarAvisoBloqueo"
+                  class="absolute inset-0 flex items-center justify-center bg-black/5 text-gray-600 text-sm pointer-events-none select-none transition-opacity duration-500"
+                >
+                  Edición desactivada — presiona “Editar ubicaciones” para modificar
+                </div>
               </v-stage>
+              <!-- ⚙️ Botones de edición manual de cada sección -->
+              <div
+                v-for="ubic in ubicacionesActivas"
+                :key="ubic._key + '-btn'"
+                class="absolute z-50"
+                :style="{
+                  left: `${(ubic.x ?? 0) + (ubic.width ?? 100) - 36}px`,
+                  top: `${(ubic.y ?? 0) + 6}px`,
+                }"
+              >
+                <button
+                  class="text-white rounded-full p-1.5 shadow-md transition"
+                  @click.stop="activarEdicionUbicacion(ubic)"
+                  title="Editar sección"
+                >
+                  <Icon icon="mdi:pencil" class="w-4 h-4" />
+                </button>
+              </div>
+
             </div>
 
             <!-- 🔹 Vista 3D -->
@@ -505,6 +670,7 @@ const darkenColor = (hex, factor = 0.25) => {
               v-else
               :ubicaciones="ubicacionesActivas"
               class="w-full h-full"
+              @seleccionarUbicacion="abrirDetalle" 
             />
           </ClientOnly>
         </div>
@@ -527,3 +693,11 @@ const darkenColor = (hex, factor = 0.25) => {
     </div>
   </div>
 </template>
+<style scoped>
+.absolute button {
+  pointer-events: all;
+}
+.absolute button:hover {
+  transform: scale(1.1);
+}
+</style>
