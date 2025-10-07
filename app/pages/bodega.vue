@@ -171,6 +171,19 @@ const agregarSeccion = async () => {
     console.error('❌ Error al crear ubicación:', err)
   }
 }
+function onActualizarZ({ id, z }) {
+  const ubic = ubicacionesActivas.value.find(u => u.id === id)
+  if (!ubic) return
+
+  ubic.z = z
+  // ⚡ Fuerza reactividad para refrescar el render 3D
+  ubicacionesActivas.value = [...ubicacionesActivas.value]
+
+  // (Opcional) sincroniza en backend
+  updateUbicacion(id, { z }).catch(err =>
+    console.error('❌ Error al actualizar altura desde padre:', err)
+  )
+}
 
 
 // ==========================
@@ -716,6 +729,7 @@ const darkenColor = (hex, factor = 0.25) => {
         v-if="ubicacionSeleccionada"
         :seccion="ubicacionSeleccionada"
         @cerrar="ubicacionSeleccionada = null"
+        @actualizarZ="onActualizarZ"
       />
     </div>
   </div>

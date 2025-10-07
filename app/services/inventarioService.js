@@ -91,3 +91,29 @@ export const getMedicamentosByUbicacion = async (idUbicacion) => {
     method: 'GET',
   })
 }
+// ✅ Niveles
+export const createNivel = async (data) => {
+  return await useApi()('/inventario/niveles', {
+    method: 'POST',
+    body: data,
+  })
+}
+
+export const updateNivel = async (id, data) => {
+  return await useApi()(`/inventario/niveles/${id}/update`, {
+    method: 'PATCH',
+    body: data,
+  })
+}
+
+export const deleteNivel = async (id) => {
+  return await useApi()(`/inventario/niveles/${id}/delete`, {
+    method: 'DELETE',
+  })
+}
+
+export const getNivelesByUbicacion = async (idUbicacion) => {
+  return await useApi()(`/inventario/niveles/${idUbicacion}`, {
+    method: 'GET',
+  })
+}

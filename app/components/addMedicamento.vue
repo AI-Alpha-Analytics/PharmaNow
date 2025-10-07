@@ -1,8 +1,12 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { Icon } from '@iconify/vue'
-
 import { useInventarioSocket } from '~/composables/useInventarioSocket'
+import { getNivelesByUbicacion } from '~/services/inventarioService'
+
+// ==========================
+// 🔹 Setup e imports
+// ==========================
 const { fetchBodegas, fetchUbicacionesByBodega, bodegas } = useInventarioSocket()
 
 const props = defineProps({
@@ -10,6 +14,11 @@ const props = defineProps({
   medicamentosExistentes: { type: Array, default: () => [] },
 })
 
+const emit = defineEmits(['guardar', 'cerrar'])
+
+// ==========================
+// 🔹 Estado general
+// ==========================
 const paso = ref(1)
 const nombre = ref('')
 const nuevoNombre = ref('')
@@ -17,24 +26,54 @@ const creandoNuevo = ref(false)
 const mostrarOpciones = ref(false)
 const error = ref('')
 
+// ==========================
+// 🔹 Jerarquía de selección
+// ==========================
 const bodegaSeleccionada = ref('')
 const ubicacionSeleccionada = ref('')
+const nivelSeleccionado = ref('')
 const ubicacionesDeBodega = ref([])
+const nivelesDeUbicacion = ref([])
 
+// 🔹 Cargar ubicaciones según bodega seleccionada
 watch(bodegaSeleccionada, async (nuevoId) => {
   if (nuevoId) {
     ubicacionesDeBodega.value = await fetchUbicacionesByBodega(nuevoId)
     ubicacionSeleccionada.value = ''
+    nivelesDeUbicacion.value = []
+    nivelSeleccionado.value = ''
   } else {
     ubicacionesDeBodega.value = []
   }
 })
 
+// 🔹 Cargar niveles según ubicación seleccionada
+watch(ubicacionSeleccionada, async (nuevoId) => {
+  if (nuevoId) {
+    try {
+      const data = await getNivelesByUbicacion(nuevoId)
+      nivelesDeUbicacion.value = data || []
+      nivelSeleccionado.value = ''
+    } catch (err) {
+      console.error('❌ Error al cargar niveles:', err)
+      nivelesDeUbicacion.value = []
+    }
+  } else {
+    nivelesDeUbicacion.value = []
+  }
+})
+
+// ==========================
+// 🔹 Datos del lote
+// ==========================
 const loteId = ref('')
 const loteEmision = ref('')
 const loteVencimiento = ref('')
 const loteCantidad = ref(0)
 
+// ==========================
+// 🔹 Búsqueda de medicamentos
+// ==========================
 const resultados = computed(() => {
   if (!nombre.value) return props.medicamentosExistentes
   return props.medicamentosExistentes.filter((m) =>
@@ -57,13 +96,16 @@ const medicamentoExistente = computed(() =>
   )
 )
 
-const emit = defineEmits(['guardar', 'cerrar'])
+// ==========================
+// 🔹 Eventos globales
+// ==========================
 const dropdownWrapper = ref(null)
 const handleClickOutside = (e) => {
   if (dropdownWrapper.value && !dropdownWrapper.value.contains(e.target)) {
     mostrarOpciones.value = false
   }
 }
+
 onMounted(async () => {
   document.addEventListener('click', handleClickOutside)
   await fetchBodegas()
@@ -72,6 +114,9 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
 })
 
+// ==========================
+// 🔹 Control de pasos
+// ==========================
 const siguiente = () => {
   error.value = ''
   const nombreFinal = creandoNuevo.value ? nuevoNombre.value : nombre.value
@@ -82,6 +127,9 @@ const siguiente = () => {
   paso.value = 2
 }
 
+// ==========================
+// 🔹 Guardar medicamento/lote
+// ==========================
 const guardar = () => {
   if (
     !loteId.value ||
@@ -91,7 +139,7 @@ const guardar = () => {
     !bodegaSeleccionada.value ||
     !ubicacionSeleccionada.value
   ) {
-    alert("Faltan campos obligatorios")
+    alert('Faltan campos obligatorios')
     return
   }
 
@@ -102,6 +150,7 @@ const guardar = () => {
     cantidad: loteCantidad.value,
     idBodega: bodegaSeleccionada.value,
     idUbicacion: ubicacionSeleccionada.value,
+    idNivel: nivelSeleccionado.value || null, // 🆕 Nivel opcional
     idProducto: medicamentoExistente.value?.id ?? null,
   }
 
@@ -139,6 +188,7 @@ const guardar = () => {
         Agregar Medicamento
       </h3>
 
+      <!-- Paso 1: Selección o creación del medicamento -->
       <form
         v-if="paso === 1"
         @submit.prevent="siguiente"
@@ -157,7 +207,10 @@ const guardar = () => {
               class="w-full border rounded-lg p-2 focus:ring-2"
               :class="error ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-indigo-500'"
             />
-            <p v-if="error" class="mt-1 text-sm text-red-600 flex items-center gap-1">
+            <p
+              v-if="error"
+              class="mt-1 text-sm text-red-600 flex items-center gap-1"
+            >
               <Icon icon="mdi:alert-circle" class="text-base" />
               {{ error }}
             </p>
@@ -189,7 +242,10 @@ const guardar = () => {
             class="w-full border rounded-lg p-2 focus:ring-2"
             :class="error ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-indigo-500'"
           />
-          <p v-if="error" class="mt-1 text-sm text-red-600 flex items-center gap-1">
+          <p
+            v-if="error"
+            class="mt-1 text-sm text-red-600 flex items-center gap-1"
+          >
             <Icon icon="mdi:alert-circle" class="text-base" />
             {{ error }}
           </p>
@@ -223,49 +279,120 @@ const guardar = () => {
         </div>
       </form>
 
+      <!-- Paso 2: Datos del lote -->
       <form v-else @submit.prevent="guardar" class="space-y-5">
         <h4 class="text-lg font-semibold text-gray-800 flex items-center gap-2">
-          <Icon icon="mdi:clipboard-list-outline" class="text-indigo-600 text-2xl" />
+          <Icon
+            icon="mdi:clipboard-list-outline"
+            class="text-indigo-600 text-2xl"
+          />
           Datos del Lote
         </h4>
 
+        <!-- ID de lote -->
         <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Número de Serie (ID)</label>
-          <input v-model="loteId" type="text" class="w-full border rounded-lg p-2" placeholder="Ej: L-12345" />
+          <label class="block text-sm font-semibold text-gray-700 mb-1"
+            >Número de Serie (ID)</label
+          >
+          <input
+            v-model="loteId"
+            type="text"
+            class="w-full border rounded-lg p-2"
+            placeholder="Ej: L-12345"
+          />
         </div>
 
+        <!-- Fechas -->
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-1">Fecha Emisión</label>
-            <input v-model="loteEmision" type="date" class="w-full border rounded-lg p-2" />
+            <label class="block text-sm font-semibold text-gray-700 mb-1"
+              >Fecha Emisión</label
+            >
+            <input
+              v-model="loteEmision"
+              type="date"
+              class="w-full border rounded-lg p-2"
+            />
           </div>
           <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-1">Fecha Vencimiento</label>
-            <input v-model="loteVencimiento" type="date" class="w-full border rounded-lg p-2" />
+            <label class="block text-sm font-semibold text-gray-700 mb-1"
+              >Fecha Vencimiento</label
+            >
+            <input
+              v-model="loteVencimiento"
+              type="date"
+              class="w-full border rounded-lg p-2"
+            />
           </div>
         </div>
 
+        <!-- Cantidad -->
         <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Cantidad</label>
-          <input v-model="loteCantidad" type="number" min="1" class="w-full border rounded-lg p-2" />
+          <label class="block text-sm font-semibold text-gray-700 mb-1"
+            >Cantidad</label
+          >
+          <input
+            v-model="loteCantidad"
+            type="number"
+            min="1"
+            class="w-full border rounded-lg p-2"
+          />
         </div>
 
+        <!-- Bodega -->
         <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Bodega</label>
+          <label class="block text-sm font-semibold text-gray-700 mb-1"
+            >Bodega</label
+          >
           <select v-model="bodegaSeleccionada" class="w-full border rounded-lg p-2">
             <option disabled value="">Selecciona una bodega</option>
-            <option v-for="b in bodegas" :key="b.id" :value="b.id">{{ b.nombre }}</option>
+            <option v-for="b in bodegas" :key="b.id" :value="b.id">
+              {{ b.nombre }}
+            </option>
           </select>
         </div>
 
+        <!-- Ubicación -->
         <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Ubicación</label>
-          <select v-model="ubicacionSeleccionada" class="w-full border rounded-lg p-2">
+          <label class="block text-sm font-semibold text-gray-700 mb-1"
+            >Ubicación</label
+          >
+          <select
+            v-model="ubicacionSeleccionada"
+            class="w-full border rounded-lg p-2"
+          >
             <option disabled value="">Selecciona una ubicación</option>
-            <option v-for="u in ubicacionesDeBodega" :key="u.id" :value="u.id">{{ u.descripcion }}</option>
+            <option
+              v-for="u in ubicacionesDeBodega"
+              :key="u.id"
+              :value="u.id"
+            >
+              {{ u.descripcion }}
+            </option>
           </select>
         </div>
 
+        <!-- 🆕 Niveles -->
+        <div v-if="nivelesDeUbicacion.length">
+          <label class="block text-sm font-semibold text-gray-700 mb-1">
+            Nivel
+          </label>
+          <select
+            v-model="nivelSeleccionado"
+            class="w-full border rounded-lg p-2"
+          >
+            <option disabled value="">Selecciona un nivel</option>
+            <option
+              v-for="n in nivelesDeUbicacion"
+              :key="n.id"
+              :value="n.id"
+            >
+              {{ n.nombre }}
+            </option>
+          </select>
+        </div>
+
+        <!-- Botones -->
         <div class="flex justify-between pt-4">
           <button type="button" @click="paso = 1" class="px-4 py-2 bg-gray-200 rounded-lg">
             <Icon icon="mdi:arrow-left" /> Atrás

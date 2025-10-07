@@ -58,7 +58,7 @@
       <TresMesh
         v-for="u in ubicacionesEscaladas"
         :key="u.id"
-        :position="[u.x3D, u.height3D / 2, u.z3D]"
+        :position="[u.x3D, u.y3D, u.z3D]"
         @click="(e) => handleMeshClick(e, u)"
         @pointerover="u.hover = true"
         @pointerout="u.hover = false"
@@ -68,7 +68,7 @@
           :color="u.hover ? '#fbbf24' : (u.color || '#f97316')"
           :emissive="u.hover ? '#fbbf24' : '#000000'"
           :emissiveIntensity="u.hover ? 0.4 : 0"
-        />
+      />
       </TresMesh>
 
     </TresCanvas>
@@ -110,29 +110,34 @@ const bodegasEscaladas = computed(() => {
 // ==========================
 // 📦 Ubicaciones
 // ==========================
-const ubicacionesEscaladas = computed(() => {
-  const bodega = bodegasEscaladas.value[0]
-  const offsetX = bodega ? bodega.width / 2 : 0
-  const offsetZ = bodega ? bodega.height / 2 : 0
+const EPS = 1;           // grosor mínimo solo para que se vea algo cuando z=0
 
-  // 🔧 Ajustes finos de encuadre
-  const ajusteX = -0.18  // mueve todo ligeramente a la derecha
-  const ajusteZ = 0.18  // mueve todo ligeramente hacia arriba
+const ubicacionesEscaladas = computed(() => {
+  const bodega = bodegasEscaladas.value[0];
+  const offsetX = bodega ? bodega.width / 2 : 0;
+  const offsetZ = bodega ? bodega.height / 2 : 0;
+
+  const ajusteX = -0.18;
+  const ajusteZ =  0.18;
 
   return props.ubicaciones.map((u) => {
-    const width3D = u.width / scale
-    const depth3D = u.height / scale
-    const height3D = 0.2
+    const width3D  = u.width  / scale;
+    const depth3D  = u.height / scale;
 
-    // 🔹 Corrige el eje Z + aplica el desplazamiento fino
-    const x3D = (u.x + u.width / 2) / scale - offsetX + ajusteX
-    const z3D = (u.y + u.height / 2) / scale - offsetZ - ajusteZ
+    // 🔸 altura en 3D sale de z (si z = 20 => 20/100 = 0.2 de altura)
+    //     usamos EPS solo cuando z=0 para que no desaparezca
+    const alturaReal = (u.z ?? 0);
+    const height3D   = ((alturaReal > 0 ? alturaReal : EPS) / scale);
 
-    const y3D = -0.5
+    // 🔸 base en el suelo: el centro queda a height3D/2
+    const y3D = height3D / 2;
 
-    return { ...u, x3D, y3D, z3D, width3D, height3D, depth3D }
-  })
-})
+    const x3D = (u.x + u.width  / 2) / scale - offsetX + ajusteX;
+    const z3D = (u.y + u.height / 2) / scale - offsetZ - ajusteZ;
+
+    return { ...u, x3D, y3D, z3D, width3D, height3D, depth3D };
+  });
+});
 
 
 // ==========================

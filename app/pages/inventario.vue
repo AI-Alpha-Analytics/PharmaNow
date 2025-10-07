@@ -201,58 +201,64 @@ const mostrarModal = ref(false)
 const guardarMedicamento = async (payload) => {
   console.log("📦 [guardarMedicamento] payload:", payload)
 
-  if (payload.tipo === 'medicamento') {
   try {
-    console.log("🚀 Enviando a endpoint createProducto...")
-    const nuevoProducto = await addProducto({
-      nombre: payload.data.nombre,
-      descripcion: payload.data.descripcion || "",
-    })
-    console.log("✅ Producto creado:", nuevoProducto)
+    // 🧱 Crear nuevo producto y su primera tanda
+    if (payload.tipo === 'medicamento') {
+      console.log("🚀 Creando nuevo producto...")
 
-    const lote = payload.data.lotes?.[0]
-    if (lote) {
-      console.log("📤 Payload tanda:", {
-        idProducto: nuevoProducto.id,
-        idBodega: lote.idBodega,
-        idUbicacion: lote.idUbicacion,
-        cantidadIngresada: lote.cantidad, 
-        fechaVencimiento: lote.vencimiento 
+      const nuevoProducto = await addProducto({
+        nombre: payload.data.nombre,
+        descripcion: payload.data.descripcion || "",
       })
+      console.log("✅ Producto creado:", nuevoProducto)
 
-      const nuevaTanda = await addTanda({
-        idProducto: nuevoProducto.id,
-        idBodega: lote.idBodega,
-        idUbicacion: lote.idUbicacion,
-        cantidadIngresada: lote.cantidad,
-        fechaVencimiento: lote.vencimiento,
-      })
-      console.log("✅ Tanda creada:", nuevaTanda)
+      const lote = payload.data.lotes?.[0]
+      if (lote) {
+        console.log("🚀 Creando tanda para el producto recién creado...")
+
+        // 👇 CAMBIO CLAVE: enviar nivelId (no idNivel)
+        const tandaPayload = {
+          idProducto: nuevoProducto.id,
+          idBodega: lote.idBodega,
+          idUbicacion: lote.idUbicacion,
+          nivelId: lote.idNivel || null, // ✅ renombrado para coincidir con backend
+          cantidadIngresada: lote.cantidad,
+          fechaVencimiento: lote.vencimiento,
+        }
+
+        console.log("📤 Payload de tanda:", tandaPayload)
+        await addTanda(tandaPayload)
+
+        console.log("✅ Tanda creada correctamente")
+      }
+
+      console.log("🧠 Esperando actualización por socket...")
     }
-  } catch (err) {
-    console.error("❌ Error al crear producto o tanda:", err)
-    alert("Error al guardar medicamento")
-  }
-}
 
-  if (payload.tipo === 'lote') {
-    try {
-      console.log("🚀 Enviando a endpoint createTanda...")
-      const nuevaTanda = await addTanda({
+    // 🧩 Agregar un nuevo lote (tanda) a un producto existente
+    if (payload.tipo === 'lote') {
+      console.log("🚀 Agregando nuevo lote (tanda) al producto existente...")
+
+      const tandaPayload = {
         idProducto: payload.id,
         idBodega: payload.lote.idBodega,
         idUbicacion: payload.lote.idUbicacion,
+        nivelId: payload.lote.idNivel || null,
         cantidadIngresada: payload.lote.cantidad,
-        fechaVencimiento: payload.lote.vencimiento 
-      })
-      console.log("✅ Tanda creada:", nuevaTanda)
-    } catch (err) {
-      console.error("❌ Error al crear tanda:", err)
-      alert("Error al guardar lote")
-    }
-  }
+        fechaVencimiento: payload.lote.vencimiento,
+      }
 
+      console.log("📤 Payload de tanda:", tandaPayload)
+      await addTanda(tandaPayload)
+
+      console.log("✅ Lote agregado correctamente, socket actualizará vista.")
+    }
+  } catch (err) {
+    console.error("❌ Error al guardar medicamento o lote:", err)
+    alert("Error al guardar medicamento o lote.")
+  }
 }
+
 </script>
 
 <template>
