@@ -260,7 +260,6 @@ const cancelarEdicionUbicaciones = async () => {
 const abrirDetalle = (ubic) => {
   ubicacionSeleccionada.value = ubic
   mostrarDetalle.value = true
-  console.log('📦 Abriendo detalle de ubicación:', ubic.descripcion)
 }
 
 const onGroupDragMove = (ubic, e) => {

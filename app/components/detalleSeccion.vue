@@ -9,9 +9,7 @@ import {
   deleteNivel,
   updateNivel,
 } from '~/services/inventarioService'
-import {
-  updateUbicacion,
-} from '~/services/inventarioService'
+import { updateUbicacion } from '~/services/inventarioService'
 const props = defineProps({
   seccion: { type: Object, required: true },
 })
@@ -35,7 +33,41 @@ const abrirDetalleNivel = (nivel) => {
   if (modoEdicion.value) return // 🚫 si está en edición, no hace nada
   nivelSeleccionado.value = nivel
   mostrarModalNivel.value = true
-  console.log('📦 Abriendo detalle del nivel:', nivel.nombre)
+}
+// ===========================
+// 🎨 Guardar color de la ubicación
+// ===========================
+const guardarColorUbicacion = async () => {
+  if (!props.seccion?.id) return
+  try {
+    console.log(
+      `🎨 Actualizando color de ubicación (${props.seccion.descripcion}): ${props.seccion.color}`
+    )
+    await updateUbicacion(props.seccion.id, {
+      z: props.seccion.z,
+      color: props.seccion.color,
+    })
+  } catch (err) {
+    console.error('❌ Error al actualizar color de ubicación:', err)
+  }
+}
+const guardarNombreUbicacion = async () => {
+  if (!props.seccion?.id) return
+  try {
+    console.log(
+      `✏️ Actualizando nombre de ubicación (${props.seccion.id}): ${props.seccion.descripcion}`
+    )
+
+    await updateUbicacion(props.seccion.id, {
+      descripcion: props.seccion.descripcion,
+      z: props.seccion.z,
+      color: props.seccion.color,
+    })
+
+    console.log('✅ Nombre de ubicación actualizado correctamente.')
+  } catch (err) {
+    console.error('❌ Error al actualizar nombre de ubicación:', err)
+  }
 }
 
 // ===========================
@@ -61,7 +93,6 @@ const cargarMedicamentos = async () => {
     } else {
       console.warn('⚠️ No se recibieron medicamentos para esta ubicación.')
     }
-
   } catch (err) {
     console.error('❌ Error al cargar medicamentos:', err)
     error.value = 'Error al cargar medicamentos'
@@ -69,7 +100,6 @@ const cargarMedicamentos = async () => {
     cargando.value = false
   }
 }
-
 
 // ===========================
 // 🔹 Cargar niveles
@@ -94,13 +124,12 @@ const cargarNiveles = async () => {
 const actualizarLayout = () => {
   layout.value = niveles.value.map((n) => ({
     i: String(n.id),
-    x: n.x ?? 0,           // ✅ usar valor guardado o 0
+    x: n.x ?? 0, // ✅ usar valor guardado o 0
     y: n.y ?? n.orden - 1, // ✅ usar valor guardado o el orden como fallback
     w: n.ancho ?? 1,
     h: n.alto ?? 1,
   }))
 }
-
 
 // ===========================
 // 🔹 Crear nivel
@@ -123,7 +152,6 @@ const agregarNivel = async () => {
     console.error('❌ Error al crear nivel:', err)
   }
 }
-
 
 // ===========================
 // 🔹 Eliminar nivel
@@ -197,8 +225,13 @@ watch(
     props.seccion.z = nuevoZ
 
     try {
-      console.log(`📏 Actualizando Z de ubicación (${props.seccion.descripcion}): ${nuevoZ}`)
-      await updateUbicacion(props.seccion.id, { z: nuevoZ })
+      console.log(
+        `📏 Actualizando Z de ubicación (${props.seccion.descripcion}): ${nuevoZ}`
+      )
+      await updateUbicacion(props.seccion.id, {
+        z: nuevoZ,
+        color: props.seccion.color || '#ffffff',
+      })
 
       // 🔹 Nuevo: avisa al padre que la altura cambió
       emit('actualizarZ', { id: props.seccion.id, z: nuevoZ })
@@ -228,9 +261,23 @@ watch(
         </button>
 
         <!-- 🔷 Título -->
-        <h2 class="text-2xl font-extrabold text-indigo-700 flex items-center gap-2 mb-4">
+        <h2
+          class="text-2xl font-extrabold text-indigo-700 flex items-center gap-2 mb-4"
+        >
           <Icon icon="mdi:warehouse" class="w-7 h-7 text-indigo-600" />
-          {{ seccion?.descripcion || 'Sección sin nombre' }}
+
+          <input
+            v-if="modoEdicion"
+            v-model="props.seccion.descripcion"
+            @change="guardarNombreUbicacion"
+            type="text"
+            class="border border-indigo-300 rounded-lg px-3 py-1 text-indigo-800 font-semibold focus:outline-none focus:ring focus:ring-indigo-200 w-[250px]"
+            placeholder="Nombre de la ubicación"
+          />
+
+          <span v-else>
+            {{ props.seccion?.descripcion || 'Sección sin nombre' }}
+          </span>
         </h2>
 
         <p class="text-sm text-gray-500 mb-6">
@@ -241,8 +288,12 @@ watch(
           <!-- 📋 Panel izquierdo -->
           <div class="col-span-10 md:col-span-3 flex flex-col gap-6 min-h-0">
             <!-- Información general -->
-            <div class="bg-gray-50 rounded-xl p-4 border border-indigo-100 shadow-sm">
-              <h3 class="font-semibold text-indigo-700 mb-3 flex items-center gap-2">
+            <div
+              class="bg-gray-50 rounded-xl p-4 border border-indigo-100 shadow-sm"
+            >
+              <h3
+                class="font-semibold text-indigo-700 mb-3 flex items-center gap-2"
+              >
                 <Icon icon="mdi:information-outline" class="w-5 h-5" />
                 Información general
               </h3>
@@ -250,7 +301,10 @@ watch(
               <div class="space-y-2 text-sm">
                 <div class="flex justify-between">
                   <span class="text-gray-600 flex items-center gap-1">
-                    <Icon icon="mdi:map-marker" class="w-4 h-4 text-indigo-500" />
+                    <Icon
+                      icon="mdi:map-marker"
+                      class="w-4 h-4 text-indigo-500"
+                    />
                     Posición (X, Y):
                   </span>
                   <span class="font-semibold text-gray-800">
@@ -260,7 +314,10 @@ watch(
 
                 <div class="flex justify-between">
                   <span class="text-gray-600 flex items-center gap-1">
-                    <Icon icon="mdi:ruler-square" class="w-4 h-4 text-indigo-500" />
+                    <Icon
+                      icon="mdi:ruler-square"
+                      class="w-4 h-4 text-indigo-500"
+                    />
                     Dimensiones:
                   </span>
                   <span class="font-semibold text-gray-800">
@@ -268,8 +325,12 @@ watch(
                   </span>
                 </div>
 
-                <div class="pt-3 border-t border-gray-200 mt-3 text-sm space-y-1">
-                  <div class="flex items-center gap-1 text-indigo-700 font-medium">
+                <div
+                  class="pt-3 border-t border-gray-200 mt-3 text-sm space-y-1"
+                >
+                  <div
+                    class="flex items-center gap-1 text-indigo-700 font-medium"
+                  >
                     <Icon icon="mdi:clipboard-list-outline" class="w-4 h-4" />
                     Totales en esta ubicación:
                   </div>
@@ -286,14 +347,21 @@ watch(
             </div>
 
             <!-- Tabla de medicamentos -->
-            <div class="bg-gray-50 rounded-xl p-4 border border-indigo-100 shadow-sm flex flex-col flex-1 min-h-0">
-              <h3 class="font-semibold text-indigo-700 mb-4 flex items-center gap-2">
+            <div
+              class="bg-gray-50 rounded-xl p-4 border border-indigo-100 shadow-sm flex flex-col flex-1 min-h-0"
+            >
+              <h3
+                class="font-semibold text-indigo-700 mb-4 flex items-center gap-2"
+              >
                 <Icon icon="mdi:pill" class="w-5 h-5" />
                 Medicamentos
               </h3>
 
               <!-- Estado de carga -->
-              <div v-if="cargando" class="flex-1 flex items-center justify-center text-gray-500">
+              <div
+                v-if="cargando"
+                class="flex-1 flex items-center justify-center text-gray-500"
+              >
                 <Icon icon="mdi:loading" class="w-6 h-6 animate-spin mr-2" />
                 Cargando medicamentos...
               </div>
@@ -304,19 +372,32 @@ watch(
               </div>
 
               <!-- Sin datos -->
-              <div v-else-if="!medicamentos.length" class="text-gray-500 text-center py-6">
-                <Icon icon="mdi:package-variant" class="w-5 h-5 inline-block text-gray-400 mr-1" />
+              <div
+                v-else-if="!medicamentos.length"
+                class="text-gray-500 text-center py-6"
+              >
+                <Icon
+                  icon="mdi:package-variant"
+                  class="w-5 h-5 inline-block text-gray-400 mr-1"
+                />
                 No hay medicamentos almacenados
               </div>
 
               <!-- Tabla -->
-              <div v-else class="flex-1 overflow-y-auto overflow-x-hidden rounded border border-gray-200">
+              <div
+                v-else
+                class="flex-1 overflow-y-auto overflow-x-hidden rounded border border-gray-200"
+              >
                 <table class="w-full text-sm table-fixed">
                   <thead class="bg-indigo-600 text-white sticky top-0">
                     <tr>
                       <th class="p-2 text-left w-1/2 font-semibold">Nombre</th>
-                      <th class="p-2 text-left w-1/4 font-semibold">Vencimiento</th>
-                      <th class="p-2 text-right w-1/4 font-semibold">Cantidad</th>
+                      <th class="p-2 text-left w-1/4 font-semibold">
+                        Vencimiento
+                      </th>
+                      <th class="p-2 text-right w-1/4 font-semibold">
+                        Cantidad
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -325,11 +406,22 @@ watch(
                       :key="med.id"
                       class="border-b last:border-0 hover:bg-indigo-50 transition"
                     >
-                      <td class="p-2 text-gray-800 truncate" :title="med.nombre">{{ med.nombre }}</td>
-                      <td class="p-2 text-gray-600">
-                        {{ med.vencimiento ? new Date(med.vencimiento).toLocaleDateString() : '—' }}
+                      <td
+                        class="p-2 text-gray-800 truncate"
+                        :title="med.nombre"
+                      >
+                        {{ med.nombre }}
                       </td>
-                      <td class="p-2 text-right font-semibold text-indigo-700">{{ med.cantidad }}</td>
+                      <td class="p-2 text-gray-600">
+                        {{
+                          med.vencimiento
+                            ? new Date(med.vencimiento).toLocaleDateString()
+                            : '—'
+                        }}
+                      </td>
+                      <td class="p-2 text-right font-semibold text-indigo-700">
+                        {{ med.cantidad }}
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -355,11 +447,15 @@ watch(
                     'px-3 py-1 rounded text-sm flex items-center gap-1 font-medium',
                     modoEdicion
                       ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                      : 'bg-gray-200 hover:bg-gray-300 text-gray-800'
+                      : 'bg-gray-200 hover:bg-gray-300 text-gray-800',
                   ]"
                 >
                   <Icon
-                    :icon="modoEdicion ? 'mdi:content-save-outline' : 'mdi:pencil-outline'"
+                    :icon="
+                      modoEdicion
+                        ? 'mdi:content-save-outline'
+                        : 'mdi:pencil-outline'
+                    "
                     class="w-4 h-4"
                   />
                   {{ modoEdicion ? 'Guardar' : 'Editar' }}
@@ -373,9 +469,16 @@ watch(
                   <Icon icon="mdi:plus-circle" class="w-4 h-4" />
                   Nivel
                 </button>
+                <!-- 🎨 Selector de color (solo en modo edición) -->
+                <input
+                  v-if="modoEdicion"
+                  type="color"
+                  v-model="props.seccion.color"
+                  @change="guardarColorUbicacion"
+                  class="absolute bottom-2 right-2 w-6 h-6 border-none cursor-pointer rounded-full shadow"
+                />
               </div>
             </div>
-
 
             <div class="relative flex-1 min-h-0 overflow-auto rounded">
               <ClientOnly>
@@ -390,17 +493,20 @@ watch(
                   class="bg-gray-100 p-2 rounded min-h-full border border-dashed border-indigo-200"
                   @layout-updated="onLayoutUpdated"
                 >
-
                   <GridItem
                     v-for="nivel in niveles"
                     :key="nivel.id"
                     :i="String(nivel.id)"
-                    :x="layout.find(l => l.i === String(nivel.id))?.x"
-                    :y="layout.find(l => l.i === String(nivel.id))?.y"
-                    :w="layout.find(l => l.i === String(nivel.id))?.w"
-                    :h="layout.find(l => l.i === String(nivel.id))?.h"
+                    :x="layout.find((l) => l.i === String(nivel.id))?.x"
+                    :y="layout.find((l) => l.i === String(nivel.id))?.y"
+                    :w="layout.find((l) => l.i === String(nivel.id))?.w"
+                    :h="layout.find((l) => l.i === String(nivel.id))?.h"
                     @click="abrirDetalleNivel(nivel)"
-                    class="bg-white border rounded-lg shadow-sm p-3 relative flex flex-col items-center justify-center hover:shadow-md transition cursor-pointer"
+                    class="border rounded-lg shadow-sm p-3 relative flex flex-col items-center justify-center hover:shadow-md transition cursor-pointer"
+                    :style="{
+                      backgroundColor: props.seccion.color || '#ffffff',
+                      borderColor: props.seccion.color || '#e5e7eb',
+                    }"
                   >
                     <button
                       @click.stop="eliminarNivel(nivel.id)"
@@ -420,61 +526,82 @@ watch(
       </div>
     </div>
     <!-- 💊 Modal de detalle de nivel -->
-
-
   </transition>
-      <transition name="fade">
+  <transition name="fade">
+    <div
+      v-if="mostrarModalNivel"
+      class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60]"
+    >
       <div
-        v-if="mostrarModalNivel"
-        class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60]"
+        class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col animate-fadeIn"
       >
         <div
-          class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col animate-fadeIn"
+          class="flex justify-between items-center border-b px-5 py-3 bg-indigo-600 text-white"
         >
-          <div class="flex justify-between items-center border-b px-5 py-3 bg-indigo-600 text-white">
-            <h3 class="font-semibold text-lg flex items-center gap-2">
-              <Icon icon="mdi:layers" class="w-5 h-5" />
-              {{ nivelSeleccionado?.nombre }}
-            </h3>
-            <button @click="mostrarModalNivel = false" class="hover:text-gray-200">
-              <Icon icon="mdi:close" class="w-6 h-6" />
-            </button>
-          </div>
+          <h3 class="font-semibold text-lg flex items-center gap-2">
+            <Icon icon="mdi:layers" class="w-5 h-5" />
+            {{ nivelSeleccionado?.nombre }}
+          </h3>
+          <button
+            @click="mostrarModalNivel = false"
+            class="hover:text-gray-200"
+          >
+            <Icon icon="mdi:close" class="w-6 h-6" />
+          </button>
+        </div>
 
-          <div class="p-5 flex-1 overflow-y-auto">
-            <template v-if="!nivelSeleccionado">
-              <p class="text-gray-500 text-center py-10">Selecciona un nivel</p>
-            </template>
+        <div class="p-5 flex-1 overflow-y-auto">
+          <template v-if="!nivelSeleccionado">
+            <p class="text-gray-500 text-center py-10">Selecciona un nivel</p>
+          </template>
 
-            <template v-else>
-              <h4 class="font-semibold text-indigo-700 mb-3 flex items-center gap-1">
-                <Icon icon="mdi:pill-multiple" class="w-5 h-5" />
-                Medicamentos en este nivel
-              </h4>
+          <template v-else>
+            <h4
+              class="font-semibold text-indigo-700 mb-3 flex items-center gap-1"
+            >
+              <Icon icon="mdi:pill-multiple" class="w-5 h-5" />
+              Medicamentos en este nivel
+            </h4>
 
-              <div v-if="!medicamentos.length" class="text-gray-500 text-center py-6">
-                <Icon icon="mdi:package-variant" class="w-5 h-5 inline-block mr-1 text-gray-400" />
-                No hay medicamentos registrados en este nivel
-              </div>
+            <div
+              v-if="!medicamentos.length"
+              class="text-gray-500 text-center py-6"
+            >
+              <Icon
+                icon="mdi:package-variant"
+                class="w-5 h-5 inline-block mr-1 text-gray-400"
+              />
+              No hay medicamentos registrados en este nivel
+            </div>
 
-              <ul v-else class="divide-y divide-gray-200 text-sm">
-                <li
-                  v-for="med in medicamentos.filter(m => m.idNivel === nivelSeleccionado.id)"
-                  :key="med.id"
-                  class="py-2 flex justify-between items-center"
-                >
-                  <div class="text-gray-700 font-medium truncate">{{ med.nombre }}</div>
-                  <div class="text-gray-500 text-xs">
-                    {{ med.vencimiento ? new Date(med.vencimiento).toLocaleDateString() : '—' }}
-                  </div>
-                  <span class="font-semibold text-indigo-600 text-sm">{{ med.cantidad }}</span>
-                </li>
-              </ul>
-            </template>
-          </div>
+            <ul v-else class="divide-y divide-gray-200 text-sm">
+              <li
+                v-for="med in medicamentos.filter(
+                  (m) => m.idNivel === nivelSeleccionado.id
+                )"
+                :key="med.id"
+                class="py-2 flex justify-between items-center"
+              >
+                <div class="text-gray-700 font-medium truncate">
+                  {{ med.nombre }}
+                </div>
+                <div class="text-gray-500 text-xs">
+                  {{
+                    med.vencimiento
+                      ? new Date(med.vencimiento).toLocaleDateString()
+                      : '—'
+                  }}
+                </div>
+                <span class="font-semibold text-indigo-600 text-sm">{{
+                  med.cantidad
+                }}</span>
+              </li>
+            </ul>
+          </template>
         </div>
       </div>
-    </transition>
+    </div>
+  </transition>
 </template>
 
 <style scoped>
