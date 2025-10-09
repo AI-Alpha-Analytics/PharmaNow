@@ -656,14 +656,14 @@ const darkenColor = (hex, factor = 0.25) => {
               <div
                 v-for="ubic in ubicacionesActivas"
                 :key="ubic._key + '-btn'"
-                class="absolute z-50"
+                class="absolute z-50 group"
                 :style="{
                   left: `${(ubic.x ?? 0) + (ubic.width ?? 100) - 36}px`,
                   top: `${(ubic.y ?? 0) + 6}px`,
                 }"
               >
                 <button
-                  class="text-white rounded-full p-1.5 shadow-md transition"
+                  class="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-white bg-indigo-600 hover:bg-indigo-700 rounded-full p-1.5 shadow-md"
                   @click.stop="activarEdicionUbicacion(ubic)"
                   title="Editar sección"
                 >
