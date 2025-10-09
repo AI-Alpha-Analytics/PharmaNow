@@ -183,6 +183,11 @@ const inconsistencia = computed(() => props.lote.cantidad > props.total)
 
         <div class="mt-6 flex justify-end gap-3">
           <button
+            @click="$emit('verUbicacion', {
+              idBodega: lote.idBodega,
+              idUbicacion: lote.idUbicacion,
+              idNivel: lote.idNivel
+            })"
             class="px-4 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-700 text-sm shadow flex items-center gap-1"
           >
             <Icon icon="mdi:tray-arrow-up" /> Ver ubicación

@@ -59,7 +59,7 @@
         v-for="u in ubicacionesEscaladas"
         :key="u.id"
         :position="[u.x3D, u.y3D, u.z3D]"
-        @click="(e) => handleMeshClick(e, u)"
+        @dblclick="(e) => handleMeshDoubleClick(e, u)"
         @pointerover="u.hover = true"
         @pointerout="u.hover = false"
       >
@@ -196,21 +196,9 @@ function actualizarOrbit(centerX, centerZ) {
 let clickTimeout = null
 
 // 🖱️ Detecta doble clic en un mesh 3D
-function handleMeshClick(e, ubic) {
+function handleMeshDoubleClick(e, ubic) {
   e.stopPropagation()
-
-  if (clickTimeout) {
-    // 🔹 Si ya hubo un clic reciente → doble clic
-    clearTimeout(clickTimeout)
-    clickTimeout = null
-    emit('seleccionarUbicacion', ubic) // 🔹 Envía evento al padre
-    return
-  }
-
-  // 🔹 Espera un poco por si hay un segundo clic
-  clickTimeout = setTimeout(() => {
-    clickTimeout = null
-  }, 250) // ⏱️ Ajusta sensibilidad (200–300 ms es ideal)
+  emit('seleccionarUbicacion', ubic)
 }
 
 // 📸 Centrar cámara al inicio cuando existan bodegas

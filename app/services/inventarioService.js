@@ -63,6 +63,21 @@ export const deleteBodega = async (id) => {
   })
 }
 
+// ✅ Obtener bodega por ID
+export const getBodegaById = async (idBodega) => {
+  return await useApi()(`/inventario/bodegas/${idBodega}`, {
+    method: 'GET',
+  })
+}
+
+// ✅ Obtener todas las ubicaciones de una bodega
+export const getUbicacionesByBodega = async (idBodega) => {
+  return await useApi()(`/inventario/bodegas/${idBodega}/ubicaciones`, {
+    method: 'GET',
+  })
+}
+
+
 // ✅ Tandas
 export const createTanda = async (data) => {
   return await useApi()('/inventario/tandas', {

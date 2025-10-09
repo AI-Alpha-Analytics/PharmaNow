@@ -4,7 +4,17 @@ import { Icon } from '@iconify/vue'
 import AddMedicamento from '~/components/addMedicamento.vue'
 import LoteDetalleVue from '~/components/LoteDetalle.vue'
 import AnalisisMedicamentoVue from '~/components/AnalisisMedicamento.vue'
-
+import VistaUbicacion3D from '~/components/VistaUbicacion3D.vue'
+import {
+  getBodegaById,
+  getUbicacionesByBodega,
+  getNivelesByUbicacion,
+} from '~/services/inventarioService'
+const mostrarVistaUbicacion = ref(false)
+const bodegaData = ref(null)
+const ubicacionesBodega = ref([])
+const ubicacionData = ref(null)
+const nivelesData = ref([])
 // SOCKET para leer
 const {
   productos: medicamentos,
@@ -14,30 +24,66 @@ const {
 } = useInventarioSocket()
 
 // REST para crear
-const { addProducto,addTanda, productos } = useInventario()
+const { addProducto, addTanda, productos } = useInventario()
 const COLORS = {
   vencido: '#9333ea', // morado
   critico: '#ef4444', // rojo
-  riesgo:  '#ee9452', // naranjo
-  alerta:  '#facc15', // amarillo
-  seguro:  '#16a34a', // verde
-  optimo:  '#3b82f6', // azul
+  riesgo: '#ee9452', // naranjo
+  alerta: '#facc15', // amarillo
+  seguro: '#16a34a', // verde
+  optimo: '#3b82f6', // azul
 }
 
 const RANGOS = computed(() => {
-  const mCrit   = daysToMonths(config.critico ?? 0)
+  const mCrit = daysToMonths(config.critico ?? 0)
   const mRiesgo = daysToMonths(config.riesgo ?? 0)
-  const mAlert  = daysToMonths(config.alerta ?? 0)
-  const mSeg    = daysToMonths(config.seguro ?? 0)
-  const mOpt    = daysToMonths(config.optimo ?? 0)
+  const mAlert = daysToMonths(config.alerta ?? 0)
+  const mSeg = daysToMonths(config.seguro ?? 0)
+  const mOpt = daysToMonths(config.optimo ?? 0)
 
   return [
-    { key: 'vencido', color: COLORS.vencido, label: 'Vencido', rango: '≤0d', check: (d) => d < 0 },
-    { key: 'critico', color: COLORS.critico, label: 'Crítico', rango: `≤${mCrit}m`, check: (d) => d >= 0 && d <= config.critico },
-    { key: 'riesgo',  color: COLORS.riesgo,  label: 'Riesgo',  rango: `${mCrit}–${mRiesgo}m`, check: (d) => d > config.critico && d <= config.riesgo },
-    { key: 'alerta',  color: COLORS.alerta,  label: 'Alerta',  rango: `${mRiesgo}–${mAlert}m`, check: (d) => d > config.riesgo && d <= config.alerta },
-    { key: 'seguro',  color: COLORS.seguro,  label: 'Seguro',  rango: `${mAlert}–${mSeg}m`, check: (d) => d > config.alerta && d <= config.seguro },
-    { key: 'optimo',  color: COLORS.optimo,  label: 'Óptimo',  rango: `>${mSeg}m`, check: (d) => d > config.seguro },
+    {
+      key: 'vencido',
+      color: COLORS.vencido,
+      label: 'Vencido',
+      rango: '≤0d',
+      check: (d) => d < 0,
+    },
+    {
+      key: 'critico',
+      color: COLORS.critico,
+      label: 'Crítico',
+      rango: `≤${mCrit}m`,
+      check: (d) => d >= 0 && d <= config.critico,
+    },
+    {
+      key: 'riesgo',
+      color: COLORS.riesgo,
+      label: 'Riesgo',
+      rango: `${mCrit}–${mRiesgo}m`,
+      check: (d) => d > config.critico && d <= config.riesgo,
+    },
+    {
+      key: 'alerta',
+      color: COLORS.alerta,
+      label: 'Alerta',
+      rango: `${mRiesgo}–${mAlert}m`,
+      check: (d) => d > config.riesgo && d <= config.alerta,
+    },
+    {
+      key: 'seguro',
+      color: COLORS.seguro,
+      label: 'Seguro',
+      rango: `${mAlert}–${mSeg}m`,
+      check: (d) => d > config.alerta && d <= config.seguro,
+    },
+    {
+      key: 'optimo',
+      color: COLORS.optimo,
+      label: 'Óptimo',
+      rango: `>${mSeg}m`,
+      check: (d) => d > config.seguro,
+    },
   ]
 })
 
@@ -55,9 +101,7 @@ const medicamentosFiltrados = computed(() => {
 
   // Orden seguro
   if (sortBy.value === 'nombre') {
-    lista.sort((a, b) =>
-      (a?.nombre || '').localeCompare(b?.nombre || '')
-    )
+    lista.sort((a, b) => (a?.nombre || '').localeCompare(b?.nombre || ''))
   } else if (sortBy.value === 'vencidos') {
     lista.sort((a, b) => {
       const vencidosA = (a.lotes || []).filter(
@@ -70,8 +114,12 @@ const medicamentosFiltrados = computed(() => {
     })
   } else if (sortBy.value === 'proximos') {
     lista.sort((a, b) => {
-      const diasA = Math.min(...(a.lotes || []).map((l) => daysUntil(l.vencimiento)))
-      const diasB = Math.min(...(b.lotes || []).map((l) => daysUntil(l.vencimiento)))
+      const diasA = Math.min(
+        ...(a.lotes || []).map((l) => daysUntil(l.vencimiento))
+      )
+      const diasB = Math.min(
+        ...(b.lotes || []).map((l) => daysUntil(l.vencimiento))
+      )
       return diasA - diasB
     })
   }
@@ -79,9 +127,7 @@ const medicamentosFiltrados = computed(() => {
   return lista
 })
 
-const hoveredMed = ref(null) 
-
-
+const hoveredMed = ref(null)
 
 const modalAnalisis = ref(false)
 const seleccionado = ref(null)
@@ -105,8 +151,6 @@ const cantidadTotal = (med) => {
   )
 }
 
-
-
 const daysToMonths = (d) => Math.round(d / 30)
 const daysUntil = (isoDate) => {
   const today = new Date()
@@ -118,11 +162,11 @@ const daysUntil = (isoDate) => {
 
 const config = reactive({
   vencido: -1,
-  critico: 2 * 30,   // 2 meses = 60 días
-  riesgo:  6 * 30,   // 6 meses = 180 días
-  alerta: 12 * 30,   // 12 meses = 360 días
-  seguro: 24 * 30,   // 24 meses = 720 días
-  optimo: 36 * 30,   // ejemplo: >36 meses
+  critico: 2 * 30, // 2 meses = 60 días
+  riesgo: 6 * 30, // 6 meses = 180 días
+  alerta: 12 * 30, // 12 meses = 360 días
+  seguro: 24 * 30, // 24 meses = 720 días
+  optimo: 36 * 30, // ejemplo: >36 meses
 })
 onMounted(async () => {
   const saved = localStorage.getItem('inventarioConfig')
@@ -139,14 +183,32 @@ onMounted(async () => {
         optimo: toNum(parsed.optimo, config.optimo),
       })
     } catch (e) {
-      console.warn("⚠️ Error leyendo inventarioConfig:", e)
+      console.warn('⚠️ Error leyendo inventarioConfig:', e)
     }
   }
 
   await fetchProductos()
+
   await Promise.all(
     medicamentos.value.map(async (med) => {
       const tandasProducto = await fetchTandasByProducto(med.id)
+
+      if (tandasProducto.length) {
+        console.table(
+          tandasProducto.map((l, i) => ({
+            n: i + 1,
+            id: l.id,
+            cantidad: l.cantidad ?? l.cantidadActual,
+            bodega: l.idBodega ?? '—',
+            ubicacion: l.idUbicacion ?? '—',
+            nivel: l.idNivel ?? '—',
+            vencimiento: l.fechaVencimiento ?? l.vencimiento,
+          }))
+        )
+      } else {
+        console.log('⚠️ No hay lotes registrados para este medicamento.')
+      }
+      console.groupEnd()
 
       med.lotes = tandasProducto
 
@@ -167,28 +229,28 @@ onMounted(async () => {
 
 
 const legend = computed(() =>
-  RANGOS.value.map(r => ({
+  RANGOS.value.map((r) => ({
     key: r.key,
     color: r.color,
-    text: `${r.label}: ${r.rango}`
+    text: `${r.label}: ${r.rango}`,
   }))
 )
 
 const getColorByDiff = (diffDays) => {
-  const rango = RANGOS.value.find(r => r.check(diffDays))
+  const rango = RANGOS.value.find((r) => r.check(diffDays))
   return rango ? rango.color : '#999'
 }
 
 const getSituacionTexto = (med) => {
-  const counts = Object.fromEntries(RANGOS.value.map(r => [r.key, 0]))
+  const counts = Object.fromEntries(RANGOS.value.map((r) => [r.key, 0]))
 
   med.lotes.forEach((lote) => {
     const diff = daysUntil(lote.vencimiento)
-    const rango = RANGOS.value.find(r => r.check(diff))
+    const rango = RANGOS.value.find((r) => r.check(diff))
     if (rango) counts[rango.key]++
   })
 
-  const found = RANGOS.value.find(r => counts[r.key] > 0)
+  const found = RANGOS.value.find((r) => counts[r.key] > 0)
   return found ? `${counts[found.key]} lotes ${found.label}` : 'Sin lotes'
 }
 
@@ -199,22 +261,22 @@ const expanded = ref([])
 const mostrarModal = ref(false)
 
 const guardarMedicamento = async (payload) => {
-  console.log("📦 [guardarMedicamento] payload:", payload)
+
 
   try {
     // 🧱 Crear nuevo producto y su primera tanda
     if (payload.tipo === 'medicamento') {
-      console.log("🚀 Creando nuevo producto...")
+
 
       const nuevoProducto = await addProducto({
         nombre: payload.data.nombre,
-        descripcion: payload.data.descripcion || "",
+        descripcion: payload.data.descripcion || '',
       })
-      console.log("✅ Producto creado:", nuevoProducto)
+
 
       const lote = payload.data.lotes?.[0]
       if (lote) {
-        console.log("🚀 Creando tanda para el producto recién creado...")
+
 
         // 👇 CAMBIO CLAVE: enviar nivelId (no idNivel)
         const tandaPayload = {
@@ -226,18 +288,18 @@ const guardarMedicamento = async (payload) => {
           fechaVencimiento: lote.vencimiento,
         }
 
-        console.log("📤 Payload de tanda:", tandaPayload)
+
         await addTanda(tandaPayload)
 
-        console.log("✅ Tanda creada correctamente")
+
       }
 
-      console.log("🧠 Esperando actualización por socket...")
+
     }
 
     // 🧩 Agregar un nuevo lote (tanda) a un producto existente
     if (payload.tipo === 'lote') {
-      console.log("🚀 Agregando nuevo lote (tanda) al producto existente...")
+
 
       const tandaPayload = {
         idProducto: payload.id,
@@ -248,14 +310,52 @@ const guardarMedicamento = async (payload) => {
         fechaVencimiento: payload.lote.vencimiento,
       }
 
-      console.log("📤 Payload de tanda:", tandaPayload)
+
       await addTanda(tandaPayload)
 
-      console.log("✅ Lote agregado correctamente, socket actualizará vista.")
+
     }
   } catch (err) {
-    console.error("❌ Error al guardar medicamento o lote:", err)
-    alert("Error al guardar medicamento o lote.")
+    console.error('❌ Error al guardar medicamento o lote:', err)
+    alert('Error al guardar medicamento o lote.')
+  }
+}
+
+const nivelActivoId = ref(null) // 🟢 nuevo: almacena el ID del nivel que se debe marcar en verde
+
+async function abrirVistaUbicacion({ idBodega, idUbicacion, idNivel }) {
+  try {
+    // 🏷️ Guardar el nivel correspondiente antes de cargar la vista
+    nivelActivoId.value = idNivel || null
+
+    // 🏠 1. Obtener datos de la bodega
+    bodegaData.value = await getBodegaById(idBodega)
+
+    // 📍 2. Obtener todas las ubicaciones de esa bodega
+    ubicacionesBodega.value = await getUbicacionesByBodega(idBodega)
+
+    // 🔸 3. Buscar la ubicación activa
+    ubicacionData.value = ubicacionesBodega.value.find((u) => u.id === idUbicacion)
+
+    if (!ubicacionData.value) {
+      throw new Error(`Ubicación con ID ${idUbicacion} no encontrada en la bodega`)
+    }
+
+    // 🧱 4. Cargar niveles asociados a la ubicación
+    nivelesData.value = await getNivelesByUbicacion(idUbicacion)
+
+    // 🟢 5. Mostrar modal 3D
+    mostrarVistaUbicacion.value = true
+
+    console.log('🧭 Vista 3D cargada correctamente:', {
+      bodega: bodegaData.value?.nombre,
+      ubicacion: ubicacionData.value?.descripcion,
+      niveles: nivelesData.value.length,
+      nivelActivo: nivelActivoId.value,
+    })
+  } catch (err) {
+    console.error('❌ Error cargando vista 3D:', err)
+    alert('No se pudo mostrar la ubicación en 3D.')
   }
 }
 
@@ -302,7 +402,7 @@ const guardarMedicamento = async (payload) => {
         <template v-for="item in legend" :key="item.key">
           <span
             class="inline-flex items-center gap-2 text-sm px-3 py-1 rounded-full"
-            :style="{ backgroundColor: item.color + '22',}"
+            :style="{ backgroundColor: item.color + '22' }"
           >
             <span
               class="w-2 h-2 rounded-full"
@@ -315,7 +415,9 @@ const guardarMedicamento = async (payload) => {
 
       <div class="overflow-hidden rounded-lg border border-gray-200">
         <div class="flex flex-wrap gap-4 items-center mb-6 w-full">
-          <div class="flex items-center border rounded-lg px-3 py-2 bg-gray-50 flex-1 min-w-[250px]">
+          <div
+            class="flex items-center border rounded-lg px-3 py-2 bg-gray-50 flex-1 min-w-[250px]"
+          >
             <Icon icon="mdi:magnify" class="text-gray-500 mr-2" />
             <input
               v-model="search"
@@ -368,10 +470,17 @@ const guardarMedicamento = async (payload) => {
 
                 <td class="px-4 py-3">{{ med.fechaEmision }}</td>
                 <td class="px-4 py-3 relative">
-                  <div v-if="med.fechaVencimiento" class="flex items-center gap-2">
+                  <div
+                    v-if="med.fechaVencimiento"
+                    class="flex items-center gap-2"
+                  >
                     <span
                       class="w-3 h-3 rounded-full cursor-pointer"
-                      :style="{ backgroundColor: getColorByDiff(daysUntil(med.fechaVencimiento)) }"
+                      :style="{
+                        backgroundColor: getColorByDiff(
+                          daysUntil(med.fechaVencimiento)
+                        ),
+                      }"
                       @mouseenter="hoveredMed = med.id"
                       @mouseleave="hoveredMed = null"
                     ></span>
@@ -380,8 +489,7 @@ const guardarMedicamento = async (payload) => {
                     <!-- Tooltip flotante -->
                     <div
                       v-if="hoveredMed === med.id"
-                      class="absolute left-8 top-1/2 -translate-y-1/2 z-10
-                            bg-white text-gray-800 text-xs px-3 py-2 rounded-lg shadow-lg border"
+                      class="absolute left-8 top-1/2 -translate-y-1/2 z-10 bg-white text-gray-800 text-xs px-3 py-2 rounded-lg shadow-lg border"
                     >
                       {{ getSituacionTexto(med) }}
                     </div>
@@ -403,20 +511,27 @@ const guardarMedicamento = async (payload) => {
               <!-- 🔹 Fila expandida -->
               <tr v-if="expanded.includes(med.id)" class="bg-gray-50">
                 <td colspan="6" class="px-6 py-4">
-                  <div v-if="(tandas[med.id] || []).length" class="grid md:grid-cols-2 gap-4">
+                  <div
+                    v-if="(tandas[med.id] || []).length"
+                    class="grid md:grid-cols-2 gap-4"
+                  >
                     <LoteDetalleVue
                       v-for="lote in tandas[med.id] || []"
                       :key="lote.id"
                       :lote="lote"
                       :config="config"
                       :total="med.cantidadTotal ?? 0"
+                      @verUbicacion="abrirVistaUbicacion"
                     />
                   </div>
                   <div
                     v-else
                     class="flex items-center justify-center gap-2 text-gray-500 text-sm py-6 border border-dashed border-gray-300 rounded-lg bg-white"
                   >
-                    <Icon icon="mdi:archive-remove-outline" class="text-2xl text-gray-400" />
+                    <Icon
+                      icon="mdi:archive-remove-outline"
+                      class="text-2xl text-gray-400"
+                    />
                     No existen lotes registrados para este medicamento.
                   </div>
                 </td>
@@ -426,11 +541,11 @@ const guardarMedicamento = async (payload) => {
         </table>
       </div>
       <AnalisisMedicamentoVue
-          v-if="modalAnalisis"
-          :medicamento="seleccionado"
-          :config="config"
-          @cerrar="modalAnalisis = false"
-        />
+        v-if="modalAnalisis"
+        :medicamento="seleccionado"
+        :config="config"
+        @cerrar="modalAnalisis = false"
+      />
 
       <AddMedicamento
         v-if="mostrarModal"
@@ -439,6 +554,42 @@ const guardarMedicamento = async (payload) => {
         @cerrar="mostrarModal = false"
         @guardar="guardarMedicamento"
       />
+
+      <transition name="fade">
+        <div
+          v-if="mostrarVistaUbicacion"
+          class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+        >
+          <div
+            class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[80vh] overflow-hidden relative flex flex-col"
+          >
+            <!-- 🔘 Cerrar -->
+            <button
+              class="absolute top-3 right-3 text-gray-300 hover:text-white transition"
+              @click="mostrarVistaUbicacion = false"
+            >
+              <Icon icon="mdi:close" class="w-6 h-6" />
+            </button>
+
+            <!-- 🔷 Título -->
+            <h2 class="text-xl font-bold text-indigo-700 p-4 flex items-center gap-2 border-b">
+              <Icon icon="mdi:cube" class="text-indigo-600 w-6 h-6" />
+              Vista 3D de ubicación: {{ ubicacionData?.descripcion || '—' }}
+            </h2>
+
+            <!-- 🌐 Componente 3D -->
+            <VistaUbicacion3D
+              v-if="bodegaData && ubicacionData"
+              :bodega="bodegaData"
+              :ubicaciones="ubicacionesBodega"
+              :ubicacion-activa="ubicacionData"
+              :niveles="nivelesData"
+              :nivel-activo-id="nivelActivoId"
+            />
+          </div>
+        </div>
+      </transition>
+
     </div>
   </div>
 </template>
